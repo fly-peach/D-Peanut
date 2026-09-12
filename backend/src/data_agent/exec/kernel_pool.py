@@ -13,6 +13,7 @@ import sys
 import time
 import uuid
 
+from jupyter_client.client import KernelClient
 from jupyter_client.kernelspec import KernelSpec, KernelSpecManager
 from jupyter_client.manager import KernelManager
 
@@ -61,6 +62,7 @@ class KernelPool:
 
     def __init__(self) -> None:
         self._kernels: dict[str, KernelManager] = {}
+        self._clients: dict[str, KernelClient] = {}
 
     def start(self, session_id: str | None = None, ready_timeout_s: float = 60.0) -> str:
         sid = session_id or uuid.uuid4().hex
@@ -73,9 +75,11 @@ class KernelPool:
         try:
             kc.wait_for_ready(timeout=ready_timeout_s)
         except Exception:
+            kc.stop_channels()
             km.shutdown_kernel(now=True)
             raise
         self._kernels[sid] = km
+        self._clients[sid] = kc
         return sid
 
     def _km(self, session_id: str) -> KernelManager:
@@ -84,9 +88,14 @@ class KernelPool:
         except KeyError as exc:
             raise KeyError(f"no kernel for session {session_id}") from exc
 
+    def _kc(self, session_id: str) -> KernelClient:
+        try:
+            return self._clients[session_id]
+        except KeyError as exc:
+            raise KeyError(f"no kernel client for session {session_id}") from exc
+
     def execute(self, session_id: str, code: str, timeout_s: float = 60.0) -> ExecResult:
-        km = self._km(session_id)
-        kc = km.client()
+        kc = self._kc(session_id)
         msg_id = kc.execute(code)
         start = time.monotonic()
         out: list[str] = []
@@ -128,10 +137,19 @@ class KernelPool:
         self._km(session_id).interrupt_kernel()
 
     def shutdown(self, session_id: str) -> None:
+        kc = self._clients.pop(session_id, None)
+        if kc is not None:
+            try:
+                kc.stop_channels()
+            except Exception:  # best-effort teardown
+                pass
         km = self._kernels.pop(session_id, None)
         if km is not None:
             try:
-                km.shutdown_kernel(now=False)
+                # now=True: SIGKILL the kernel process. Graceful shutdown can leave
+                # busy kernels lingering and holding pipes; kernel state is disposable
+                # at session teardown.
+                km.shutdown_kernel(now=True)
             except Exception:  # best-effort teardown
                 pass
 
