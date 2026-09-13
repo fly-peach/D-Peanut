@@ -187,6 +187,18 @@ class AssetService:
     def load_source(self, asset_id: str) -> str:
         return (self.path_of(asset_id) / "processor.py").read_text(encoding="utf-8")
 
+    def write_params(self, asset: ChartAsset, params: dict[str, Any]) -> ChartAsset:
+        """Persist new params (no version bump): validated -> draft (must revalidate),
+        on_canvas keeps its spot (frontend marks dirty until re-run)."""
+        root = self.path_of(asset.id)
+        _atomic_write(root / "params.json", json.dumps(params, ensure_ascii=False, indent=1))
+        asset.params = params
+        if asset.status is AssetStatus.validated:
+            asset.status = AssetStatus.draft
+        self.recompute_content_hash(asset)
+        self._persist(asset)
+        return asset
+
     def save_source(self, asset_id: str, source: str, params: dict[str, Any] | None = None,
                        *, expected_version: int | None = None) -> ChartAsset:
         """Write new processor/params + snapshot the PREVIOUS state as versions/{v}.tar."""
