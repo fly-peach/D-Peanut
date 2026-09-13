@@ -33,6 +33,12 @@ def delete_session(sid: str, request: Request) -> None:
     request.app.state.store.delete_session(sid)
 
 
+@router.get("/{sid}/messages")
+def session_messages(sid: str, request: Request) -> list[dict]:
+    """N4 restore source: last completed run's full UIMessage list."""
+    return request.app.state.store.get_messages(sid)
+
+
 @router.post("/{sid}/chat")
 async def chat(sid: str, request: Request) -> StreamingResponse:
     deps = request.app.state

@@ -16,6 +16,7 @@ import { Streamdown } from 'streamdown'
 
 import { Button } from '@/components/ui/button'
 import { buildOption } from '@/lib/chartRender'
+import { diffLines } from '@/lib/diffLines'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useChatStore } from '@/stores/chatStore'
 import type { ChartConfig, RenderData } from '@/types/assets'
@@ -101,6 +102,56 @@ function FinalAnswerCard({ input }: { input: Part }) {
   )
 }
 
+function ApprovalDiff({ part }: { part: Part }) {
+  const name = String(part.type ?? '').replace(/^tool-/, '')
+  const [oldSrc, setOldSrc] = useState<string | null>(null)
+  useEffect(() => {
+    const aid = part.input?.asset_id
+    if (name !== 'write_processor' || !aid) return
+    void fetch(`/api/assets/${aid}`).then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setOldSrc(String(j.source ?? '')))
+      .catch(() => setOldSrc(''))
+  }, [name, part.input?.asset_id])
+
+  if (name === 'save_asset') {
+    return (
+      <div className="space-y-1 text-[11px]">
+        <p className="text-muted-foreground">上画布确认 —— 该资产已过闸，params 决定首次渲染：</p>
+        <pre className="bg-muted/60 rounded p-1 font-mono text-[10px]">{JSON.stringify(part.input)}</pre>
+      </div>
+    )
+  }
+  const newSrc = String(part.input?.source ?? '')
+  const rows = oldSrc != null && newSrc ? diffLines(oldSrc, newSrc) : null
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-[11px]">
+        {part.input?.name ?? part.input?.asset_id ?? '新资产'}
+        {' · 绑定 '}{JSON.stringify(part.input?.bindings ?? []).slice(0, 120)}
+        {part.input?.chart_type ? ` · ${part.input.chart_type}` : ''}
+      </p>
+      {rows ? (
+        <div className="bg-muted/40 max-h-40 overflow-auto rounded p-1 font-mono text-[10px] leading-tight">
+          {rows.map((r, i) => (
+            <div key={i} className={r.kind === 'add' ? 'text-emerald-500'
+              : r.kind === 'del' ? 'text-destructive' : 'text-muted-foreground'}>
+              {r.kind === 'add' ? '+ ' : r.kind === 'del' ? '- ' : '  '}{r.text}
+            </div>
+          ))}
+        </div>
+      ) : newSrc ? (
+        <pre className="bg-muted/60 max-h-40 overflow-auto rounded p-1 font-mono text-[10px] leading-tight">
+          {newSrc.slice(0, 1600)}
+        </pre>
+      ) : (
+        <pre className="bg-muted/60 max-h-32 overflow-auto rounded p-1 font-mono text-[10px]">
+          {JSON.stringify(part.input).slice(0, 800)}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 function ToolCard({ part, onApprove }: { part: Part; onApprove: (approved: boolean, reason?: string) => void }) {
   const name = String(part.type ?? '').replace(/^tool-/, '')
   const state: string = part.state ?? ''
@@ -135,9 +186,7 @@ function ToolCard({ part, onApprove }: { part: Part; onApprove: (approved: boole
           {part.approval?.requestReason && (
             <p className="text-muted-foreground text-[11px]">{part.approval.requestReason}</p>
           )}
-          <pre className="bg-muted/60 max-h-32 overflow-auto rounded p-1 font-mono text-[10px]">
-            {JSON.stringify(part.input).slice(0, 800)}
-          </pre>
+          <ApprovalDiff part={part} />
           <div className="flex justify-end gap-2">
             <Button size="xs" variant="outline" onClick={() => onApprove(false, '用户拒绝')}><X className="size-3" />拒绝</Button>
             <Button size="xs" onClick={() => onApprove(true)}><Check className="size-3" />批准</Button>
@@ -160,6 +209,24 @@ function ToolCard({ part, onApprove }: { part: Part; onApprove: (approved: boole
 
 export function ChatPanel() {
   const sid = useChatStore((s) => s.activeSid)
+  const [restored, setRestored] = useState<UIMessage[] | null>(null)
+
+  useEffect(() => {
+    setRestored(null)
+    if (!sid) return
+    void fetch(`/api/sessions/${sid}/messages`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((ms) => setRestored(Array.isArray(ms) ? ms : []))
+      .catch(() => setRestored([]))
+  }, [sid])
+
+  if (!sid) return <p className="text-muted-foreground p-4 text-xs">未选择会话</p>
+  if (restored === null) return <p className="text-muted-foreground p-4 text-xs">恢复会话…</p>
+  // key forces re-init of useChat with the restored copy when switching sessions
+  return <ChatInner key={`${sid}:${restored.length}`} sid={sid} initial={restored} />
+}
+
+function ChatInner({ sid, initial }: { sid: string; initial: UIMessage[] }) {
   const aiEnabled = useChatStore((s) => s.aiEnabled)
   const newSession = useChatStore((s) => s.newSession)
   const loadAll = useCanvasStore((s) => s.loadAll)
@@ -167,12 +234,13 @@ export function ChatPanel() {
   const seenAssets = useRef(new Set<string>())
 
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: `/api/sessions/${sid ?? 'none'}/chat` }),
+    () => new DefaultChatTransport({ api: `/api/sessions/${sid}/chat` }),
     [sid],
   )
 
   const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
-    id: sid ?? 'none',
+    id: sid,
+    messages: initial.length ? initial : undefined,
     transport,
     sendAutomaticallyWhen: ({ messages: ms }: { messages: UIMessage[] }) => {
       const last = ms[ms.length - 1]

@@ -2,7 +2,7 @@
  * appearance overrides are local-only (zero network); data changes need re-run. */
 
 import type { ECharts } from 'echarts'
-import { BarChart3, History, RefreshCw, Ruler, Settings2, Trash2 } from 'lucide-react'
+import { BarChart3, Download, FileSpreadsheet, History, RefreshCw, Ruler, Settings2, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { ParamForm } from '@/components/canvas/ParamForm'
@@ -59,6 +59,37 @@ export function ChartCard({ row, bundle }: { row: AssetIndexRow; bundle?: Render
 
   useEffect(redraw, [bundle, appearance])
 
+  const exportPng = () => {
+    const chart = chartRef.current
+    if (!chart) return
+    const url = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#191a1b' })
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${row.name}.png`
+    a.click()
+  }
+
+  const exportCsv = () => {
+    if (!bundle) return
+    const t = bundle.render.tables.main ?? Object.values(bundle.render.tables)[0]
+    if (!t) return
+    const esc = (v: unknown) => {
+      const s = v == null ? '' : String(v)
+      return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
+    }
+    const lines = [t.dimensions.join(',')]
+    const len = t.source[0]?.values.length ?? 0
+    for (let i = 0; i < len; i++) {
+      lines.push(t.source.map((c) => esc(c.values[i])).join(','))
+    }
+    const blob = new Blob(["﻿" + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${row.name}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   const doReplay = async () => {
     setReplaying(true)
     const r = await replay(row.id)
@@ -83,6 +114,11 @@ export function ChartCard({ row, bundle }: { row: AssetIndexRow; bundle?: Render
         <Badge variant="outline" className="ml-1 shrink-0 text-[10px]">{row.chart_type}</Badge>
         <span className="text-muted-foreground shrink-0 text-[10px]">v{row.version}</span>
         {dirty && <Badge variant="secondary" className="shrink-0 text-[10px]">参数已改·待重跑</Badge>}
+        {row.stale_data && (
+          <Badge variant="outline" className="border-amber-500/60 text-amber-500 shrink-0 text-[10px]">
+            数据已更新·待重跑
+          </Badge>
+        )}
         {failed && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -92,6 +128,12 @@ export function ChartCard({ row, bundle }: { row: AssetIndexRow; bundle?: Render
           </Tooltip>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <Button size="icon-xs" variant="ghost" title="导出 PNG" onClick={exportPng} disabled={!bundle}>
+            <Download className="size-3" />
+          </Button>
+          <Button size="icon-xs" variant="ghost" title="导出 CSV" onClick={exportCsv} disabled={!bundle}>
+            <FileSpreadsheet className="size-3" />
+          </Button>
           <Button size="icon-xs" variant="ghost" title="重跑" onClick={doReplay} disabled={replaying}>
             <RefreshCw className={replaying ? 'size-3 animate-spin' : 'size-3'} />
           </Button>

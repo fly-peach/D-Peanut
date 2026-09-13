@@ -117,6 +117,27 @@ class RunStore:
         )
         self.conn.commit()
 
+    def replace_messages(self, session_id: str, run_id: str,
+                         ui_messages: list[dict[str, Any]]) -> None:
+        """Server-side copy of the whole UIMessage list after a run
+        (N4 restore source; last run wins)."""
+        self.conn.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+        for m in ui_messages:
+            self.conn.execute(
+                "INSERT INTO messages(session_id,role,parts_json,run_id,created_at)"
+                " VALUES(?,?,?,?,?)",
+                (session_id, str(m.get("role", "assistant")),
+                 json.dumps(m.get("parts", []), ensure_ascii=False, default=str), run_id, _now()),
+            )
+        self.conn.commit()
+
+    def get_messages(self, session_id: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT role, parts_json FROM messages WHERE session_id=? ORDER BY id", (session_id,)
+        ).fetchall()
+        return [{"id": f"restored-{i}", "role": r["role"], "parts": json.loads(r["parts_json"])}
+                for i, r in enumerate(rows)]
+
     # -- runs -------------------------------------------------------------------
 
     def create_run(self, session_id: str, message: str,

@@ -115,6 +115,49 @@ class ChatRunner:
                 yield line
             return
 
+        # Restore copies are rebuilt from the emitted chunk stream (works even when
+        # the run ends paused on approval, where on_complete never fires).
+        collected: list[dict[str, Any]] = []
+
+        def _absorb(chunk: Any) -> None:
+            try:
+                data = chunk.model_dump(by_alias=True, exclude_none=True)
+            except Exception:  # noqa: BLE001
+                return
+            t = data.get("type")
+            if t == "text-delta":
+                if collected and collected[-1]["type"] == "text":
+                    collected[-1]["text"] += data.get("delta", "")
+                else:
+                    collected.append({"type": "text", "text": data.get("delta", "")})
+            elif t == "tool-input-available":
+                collected.append({"type": f"tool-{data.get('toolName', '?')}",
+                                  "toolCallId": data.get("toolCallId"),
+                                  "state": "input-available", "input": data.get("input")})
+            elif t == "tool-output-available":
+                call_id = data.get("toolCallId")
+                for p in reversed(collected):
+                    if p.get("toolCallId") == call_id:
+                        p["output"] = data.get("output")
+                        p["state"] = "output-available"
+                        break
+            elif t == "tool-output-error":
+                call_id = data.get("toolCallId")
+                for p in reversed(collected):
+                    if p.get("toolCallId") == call_id:
+                        p["errorText"] = data.get("errorText")
+                        p["state"] = "output-error"
+                        break
+            elif t in ("data-asset-changed", "data-run"):
+                collected.append({"type": t, "data": data.get("data")})
+
+        def _persist() -> None:
+            msgs: list[dict[str, Any]] = [
+                {"role": "user", "parts": [{"type": "text", "text": run.message}]},
+                {"role": "assistant", "parts": collected},
+            ]
+            self.store.replace_messages(session_id, run.run_id, msgs)
+
         msettings = build_model_settings(deps.settings)
         raw = adapter.run_stream(
             deps=deps,
@@ -134,6 +177,7 @@ class ChatRunner:
             nonlocal status
             try:
                 async for chunk in raw:
+                    _absorb(chunk)
                     if getattr(chunk, "type", "") == "finish":
                         # the run summary must precede finish/[DONE] on the wire
                         for note in _drain_assets(state, status):
@@ -151,6 +195,10 @@ class ChatRunner:
                     "error": f"{type(e).__name__}: {str(e)[:300]}",
                 })
             finally:
+                try:
+                    _persist()
+                except Exception:  # noqa: BLE001 — restore copies must never break a run
+                    pass
                 self.store.finish_run(run.run_id,
                                       RunStatus.DONE if status == "done" else RunStatus.FAILED,
                                       {"tokens": state.usage_tokens}, state.usage_cost)

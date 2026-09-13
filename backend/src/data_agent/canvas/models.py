@@ -115,6 +115,7 @@ class ChartAsset(BaseModel):
     provenance: ProvenanceInfo = Field(default_factory=ProvenanceInfo)
     last_gate: GateReport | None = None
     description: str = ""
+    stale_data: bool = False  # N4: bound dataset revision moved -> card shows "data updated"
     created_at: str = Field(default_factory=_now)
     updated_at: str = Field(default_factory=_now)
 
@@ -142,3 +143,4 @@ class AssetIndexRow(BaseModel):
     gate_passed: bool | None = None
     gate_at: str | None = None
     has_render: bool = False
+    stale_data: bool = False

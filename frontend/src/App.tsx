@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 
 import DatasourcesPage from '@/pages/Datasources'
+import AuditPage from '@/pages/Audit'
 import Settings from '@/pages/Settings'
 import Workspace from '@/pages/Workspace'
 import { settingsApi } from '@/api/client'
+import { useCanvasStore } from '@/stores/canvasStore'
 import { useChatStore } from '@/stores/chatStore'
 
-type Tab = 'workspace' | 'datasources' | 'settings'
+type Tab = 'workspace' | 'datasources' | 'audit' | 'settings'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'workspace', label: '工作台' },
   { id: 'datasources', label: '数据源' },
+  { id: 'audit', label: '审计' },
   { id: 'settings', label: '设置' },
 ]
 
@@ -27,6 +30,12 @@ function App() {
       setModelDot(String(v.settings.llm_model || v.settings.llm_provider || 'test'))
     }).catch(() => setModelDot('?'))
   }, [loadAiToggle])
+
+  // light canvas poll so auto-rescan stale badges appear without manual refresh
+  useEffect(() => {
+    const t = setInterval(() => { void useCanvasStore.getState().loadAll() }, 15000)
+    return () => clearInterval(t)
+  }, [])
 
   return (
     <div className="flex h-dvh flex-col">
@@ -64,6 +73,7 @@ function App() {
       <div className="min-h-0 flex-1">
         {tab === 'workspace' && <Workspace />}
         {tab === 'datasources' && <DatasourcesPage />}
+        {tab === 'audit' && <AuditPage />}
         {tab === 'settings' && <Settings />}
       </div>
     </div>

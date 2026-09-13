@@ -300,9 +300,38 @@ class AssetService:
                     gate_passed=None if gate_errors is None else bool(gate_errors["passed"]),
                     gate_at=None if gate_errors is None else gate_errors["ran_at"],
                     has_render=(self.path_of(asset_id) / "render.json").is_file(),
+                    stale_data=bool(self._safe_stale(asset_id)),
                 )
             )
         return out
+
+    def mark_stale_for_datasets(self, dataset_names: set[str]) -> int:
+        """Flag assets whose bindings reference changed datasets (N4 data drift).
+        Additive only: stale is cleared by a successful replay, never by a later tick."""
+        flagged = 0
+        for row in self.conn.execute("SELECT id FROM assets").fetchall():
+            try:
+                asset = self.get(row["id"])
+            except Exception:  # noqa: BLE001 — broken assets stay broken, skip
+                continue
+            if asset.stale_data or not ({b.dataset.name for b in asset.bindings} & dataset_names):
+                continue
+            asset.stale_data = True
+            self._persist(asset)
+            flagged += 1
+        return flagged
+
+    def _safe_stale(self, asset_id: str) -> bool:
+        try:
+            return self.get(asset_id).stale_data
+        except Exception:  # noqa: BLE001
+            return False
+
+    def clear_stale(self, asset_id: str) -> None:
+        asset = self.get(asset_id)
+        if asset.stale_data:
+            asset.stale_data = False
+            self._persist(asset)
 
     def record_replay(self, asset_id: str, version: int, trigger: str, passed: bool,
                       errors: list[str], elapsed_s: float, ran_at: str) -> None:
