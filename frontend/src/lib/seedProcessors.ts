@@ -1,4 +1,8 @@
-"""Seed processor: Top-N cities by revenue as a bar chart (N2 contract-lock fixture)."""
+/** Seed processor sources for creating demo cards before N3 (mirror of
+ * backend/tests/fixtures/processors/bar_topn.py — kept byte-identical to the
+ * contract-lock fixture so UI demo and CI test exercise the same processor). */
+
+export const BAR_TOPN_SOURCE = `"""Seed processor: Top-N cities by revenue as a bar chart (N2 contract-lock fixture)."""
 
 from data_agent.schemas.chart import (
     Appearance,
@@ -45,3 +49,4 @@ def process(ctx):
                               show_label=bool(ctx.params.get("show_label", False))),
     )
     return render, config
+`

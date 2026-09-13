@@ -134,6 +134,7 @@ def put_params(asset_id: str, body: ParamsPut, request: Request) -> dict[str, An
         asset = svc.assets.get(asset_id)
     except AssetNotFound:
         raise _err(404, "asset not found") from None
+    body.params = merge_defaults(asset.param_spec, body.params)
     errs = validate_params(asset.param_spec, body.params)
     if errs:
         raise _err(400, "; ".join(errs))

@@ -55,3 +55,36 @@ export const settingsApi = {
   put: (body: { settings?: Record<string, unknown>; secrets?: Record<string, string> }) =>
     http<SettingsView>('/settings', { method: 'PUT', body: JSON.stringify(body) }),
 }
+
+import type {
+  AssetIndexRow,
+  ChartAsset,
+  RenderBundle,
+} from '@/types/assets'
+
+export const assetsApi = {
+  list: () => http<AssetIndexRow[]>('/assets'),
+  get: (id: string) => http<{ asset: ChartAsset; source: string }>(`/assets/${id}`),
+  create: (body: {
+    name: string
+    source: string
+    bindings: { alias: string; dataset: string }[]
+    chart_type: string
+    params?: Record<string, unknown>
+  }) => http<{ asset: ChartAsset; gate: unknown }>('/assets', { method: 'POST', body: JSON.stringify(body) }),
+  render: (id: string) => http<RenderBundle>(`/assets/${id}/render`),
+  replay: (id: string) =>
+    http<{ gate: { passed: boolean; errors: string[] }; render: unknown; config: unknown; version: number }>(
+      `/assets/${id}/replay`, { method: 'POST' }),
+  putParams: (id: string, params: Record<string, unknown>, expectedVersion: number) =>
+    http<{ asset: ChartAsset; needs_replay: boolean }>(`/assets/${id}/params`, {
+      method: 'PUT', body: JSON.stringify({ params, expected_version: expectedVersion }) }),
+  setPlacement: (id: string, placement: { x: number; y: number; w: number; h: number; z: number }) =>
+    http<{ ok: boolean }>(`/assets/${id}/canvas`, { method: 'PATCH', body: JSON.stringify({ placement }) }),
+  rollback: (id: string, toVersion: number) =>
+    http<{ asset: ChartAsset }>(`/assets/${id}/rollback`, {
+      method: 'POST', body: JSON.stringify({ to_version: toVersion }) }),
+  history: (id: string) =>
+    http<{ versions: number[]; replays: Record<string, unknown>[] }>(`/assets/${id}/history`),
+  remove: (id: string) => http<void>(`/assets/${id}`, { method: 'DELETE' }),
+}
