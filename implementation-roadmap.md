@@ -1,110 +1,95 @@
-# 实施路线图：从 MVP 到逐层封装
+# 实施路线图 v3：三层架构，从数据底座到可信产品
 
-> 核心思想：先造最里层的引擎，把技术风险前置清零；然后逐层向外包——协议、界面、信任、稳健、产品。每层结束都有可演示、可回归的产物；**层与层的边界接口在进入外层后只加不改**，这就是「逐层优化封装」的落点。
+> 核心思想不变：**先造最里层，把技术风险前置清零；逐层向外封装；每层结束可演示可回归；层边界接口进入外层后只加不改。**
+> v2→v3 变化：产品定义改为三层（数据导入 catalog / 画布 canvas / AI 对话框 agents），原 M1-M5 六层里程碑作废，重排为 **N1-N4**；M0 已完成资产（内核池、适配器桥、CI/Docker、前端基座）全部沿用。设计依据：design-architecture.md v3 + agent-design.md v3。
 
-## 0. 封装顺序与次序原则
+## 0. 封装次序与冻结点
 
-由内向外六层：
+由内向外：
 
-1. **引擎层**：内核 + 工具 + Agent 循环（在 CLI 里可用）
-2. **协议层**：Run 状态机 + UIMessage 流桥接
-3. **交互层**：前端工作台（第一个可用的产品形态）
-4. **信任层**：审批 / 数值追溯 / 隐私 / 成本可视化
-5. **稳健层**：持久化 / 长会话压缩 / 部署
-6. **产品层（v1+）**：连接器 / 知识库 / 报告 / 多用户 / 沙箱
+1. **N1 数据底座**：Dataset 注册/扫描/画像/读取——数据可被寻址
+2. **N2 画布资产**：ChartAsset + clean-kernel 重放 + schema 闸门 + 前端渲染——**不依赖 AI 的产品内核先成立**
+3. **N3 AI 编码环**：coding agent 十工具 + 轻模式 + promote + AI toggle——AI 作为"作者"接上
+4. **N4 信任稳健**：审批预览 / 审计 / 压缩 / 并发 / 部署打磨 → tag **v0.1.0**
 
-次序四原则：
-- **风险前置**：三个 spike 在 M0 清零、桥接在 M2 冻结——技术不确定性在前 1/3 消化，后面全是确定性组装
-- **每层可演示**：CLI 演示 → curl 看流 → 浏览器可用 → 完整 DoD，进度永远看得见
-- **接口冻结**：KernelRunner 签名、UIMessage 事件映射表、REST 面，进入外层后只扩展不修改
-- **测试随层走**：纯函数（verifier/profiler/事件映射）单测；引擎行为用 fixture 数据集回归；流协议做契约测试
+次序四原则（v3 表述）：
+- **风险前置**：重放确定性与 clean kernel 冷启动在 N2 首日消化（v3 最大技术不确定项，替代旧 Spike A 位置）
+- **每层可演示**：N1 数据源页 → N2 手画三张能重跑的卡（零 AI！）→ N3 对话建卡 → N4 完整 DoD
+- **接口冻结点**：**N1 末** Dataset/DatasetRef 契约；**N2 末** processor 协议 + RenderData/ChartConfig + 闸门（此后 AI 只准对着 schema 写码）；**N3 末** 十工具签名 + 事件归属表
+- **测试随层走**：纯函数（verifier/gate/profiler）表驱动单测；重放确定性回归集是 v3 架构合同锁；对话流用 TestModel 离线契约测试（Spike A 测试升格）
 
-## 1. M0 脚手架与 Spike（约 3-5 天）
+## 1. M0 已完成（2026-09，归档）
 
-目标：技术风险清零 + CI 建立。
+脚手架 + 三 spike 全绿：`exec/kernel_pool.py`（每会话 ipykernel、跨轮常驻、超时中断恢复）、VercelAIAdapter granular 三方法 + DataChunk 自定义 data part（tests/test_spike_a_*）、bun/Vite/Tailwind4/shadcn/ai-elements 构建链、CI 三 job、多阶段 Docker + compose :8010。详见 openspec/changes/archive/m0-scaffold-spikes/。
 
-- backend：`uv init`、ruff + pytest、目录骨架（design-architecture §2.2）
-- frontend：`bun create vite`、Tailwind4 + shadcn、ai-elements 装件、静态 Conversation 渲染
-- **Spike A**：v2 下 VercelAIAdapter——import 路径 / extras / 自定义 data part 支持（pytest 直测，不需要前端）
-- **Spike B**：kernel_pool 最小版——子进程内核、execute/capture/interrupt、验证 DataFrame 常驻
-- **Spike C**：bun + Vite + ai-elements 在本机 Windows 跑通
-- CI：`uv sync --frozen && ruff check && pytest`；`bun install --frozen-lockfile && tsc --noEmit && bun run build`
+> 旧 M1（引擎层/CLI）与 M2（协议层）的 change 计划随 v3 产品定义重定义而作废删除；其仍成立的组件设计（profiler/duck/verifier 测试清单、TestModel 轨迹测法、预算/reflect 计数、画像 token 预算）按下列 N 阶段标注回收。
 
-验收：三个 spike 各有一个通过的测试或页面；main 分支 clone 即跑。
+## 2. N1 数据导入层（约 1 周）—— change `data-catalog`
 
-## 2. M1 引擎层（约 1 周）——CLI 里可用的 data agent
+1. `catalog/models.py` + `registry.py`：Dataset 三 kind、DatasetRef(revision)、sqlite 索引 + content_hash 自愈 + rebuild_index
+2. `sources/file.py`：CSV/Parquet/XLSX（pandas 读，绕 DuckDB excel 扩展——旧 M1 决策）；`sources/sql.py`：sqlite 反射起步（PG/MySQL N4 后）；secrets.json + conn_ref
+3. `scan.py`：folder glob 展开物化 child + mtime+size 树指纹 diff
+4. `profiler.py / sampler.py / reader.py`：旧 M1 设计整体搬（≤500 token/表预算、隐私清样本值、XLSX 临时视图、DuckDB 谓词下推）
+5. `api/datasets.py` 全套端点 + compose 加 DATA_ROOT/WORKSPACE_ROOT 两卷 + 路径 jail
+6. 前端数据源页：注册表单、扫描/画像状态轮询、画像/预览卡、隐私开关
 
-按依赖顺序实现：
+**验收**：DoD #1（200 文件 <5min、增量 rescan、连接串零泄漏、隐私无原始行）。
+**冻结**：Dataset/DatasetRef/TableProfile 契约——N2/N3 只读不改。
 
-1. Agent 实例化（agent-design §1-§4 落地）：instructions 七块、AgentDeps、output_type=FinalAnswer
-2. `execute_code`（含 AST verifier 纯函数 + 单测）→ kernel runner 接入
-3. `sql_query`（DuckDB attach 上传文件）→ `get_profile` / `preview_data`（LIDA 式画像）
-4. `submit_plan` → `plot_chart`（此阶段先落文件，不渲染）
-5. reflect 循环 ≤3 + ModelRetry + max_steps/预算熔断
-6. CLI 入口 `uv run data-agent chat`（rich 终端对话）
+## 3. N2 画布资产与重放（约 1.5 周）—— change `canvas-assets`（全程无 AI）
 
-验收：agent-design 的 DoD #2——fixture 数据集上故意错列名，观察到自动修复并最终成功；画像注入满足 token 预算。
-沉淀：verifier / profiler / 全部工具签名带单测——**引擎层接口在此冻结**。
+1. 首日专项：clean kernel 预热池（`canvas/kernels.py`）冷启动与 reset 残留实测 → 定池策略（v3 风险前置项）
+2. `canvas/models.py`：ChartAsset/ParamField/Binding/OutputSchema/RenderData/ChartConfig + `schemas/chart.py`
+3. `canvas/assets.py`：FS 读写（原子 tmp+rename）、版本快照、乐观锁、index 漂移标 broken
+4. `canvas/gate.py`：闸门纯函数（columns→dtype→row_bounds→payload 2MB），表驱动单测
+5. `canvas/replay.py`：processor 编译进 clean 命名空间 → process(ctx) → 闸门 → render.json/config.json；draft 首闸盖章 output_schema
+6. `api/assets.py + canvas.py`：replay/render/params/canvas/rollback/history 端点（闸门失败 = 200+passed:false）
+7. 前端：画布页 ChartCard（ECharts dataset 消费 + 纯 JSON 契约渲染器）、ParamForm（param_spec 驱动）、重跑按钮、GateBanner 上版留屏、外观参数前端本地重 setOption、表格卡
+8. fixture：**3 个手写种子 processor（bar/line/pivot）当回归集**——replay×100 字节级一致合同锁
 
-## 3. M2 协议层（约 3-4 天）——引擎接到 UIMessage 流
+**验收**：DoD #2 全部四条。
+**冻结**：processor 协议 + 渲染 schema + 闸门语义。
 
-1. Run 状态机 + SQLite store（steps/tokens/cost）+ 事件发射
-2. VercelAIAdapter granular 三方法（build_run_input / run_stream / encode_stream）嵌入 Run 执行器
-3. REST v0：sessions / chat / runs / cancel（confirm 占位）
-4. 事件映射表（data-plan / data-artifact / data-confirm / data-run）冻结为前后端契约文档
+## 4. N3 AI 编码环（约 1.5 周）—— change `ai-coding-loop`
 
-验收：不用前端，`curl -N` 或 30 行临时页能看到计划→代码→文本全流式；断线重连续传；Run 表可审计。
-意义：**此层之后前端只认协议不认后端实现**——后续后端怎么重构都不影响 UI。
+1. `agents/`：deps/prompts（七块新纪律 + processor 模板 + 动态 catalog 摘要注入）/tools 十工具/approval 装配
+2. `runs/`：/chat（toggle 409 语义）+ granular 桥 + data-asset-changed 通知帧 + FinalAnswer/cost；budget 熔断（旧 M1 设计搬）；store 补 usage/审批
+3. deferred 审批续跑：DeferredToolRequests → 前端 ConfirmDialog → /confirm 携结果 + 历史续跑
+4. 轻模式：emit_adhoc_chart（ToolReturn.metadata 内联卡）+ `POST /assets/promote` 确定性 seed + 合成消息改写环
+5. 前端：useChat 接真流（替换 M0 静态演示）、工具卡、ConfirmDialog、adhoc 卡 + promote 按钮、AI toggle 顶栏、修复横幅/成本徽章
+6. 测试：`agent.override(TestModel/FunctionModel)` 离线全环轨迹（探→试→write→validate 炸→修→save）；Spike A 帧序升格为契约测试；live 标记默认 skip
 
-## 4. M3 交互层（约 1 周）——浏览器里可用的 MVP
+**验收**：DoD #3 全部五条。
+**冻结**：十工具签名 + 事件归属表（design-architecture §3.2）。
 
-1. useChat transport 接 /chat；Conversation + Message 渲染
-2. Tool 组件：execute_code 代码流 + 执行结果
-3. Task 组件：计划卡状态流转
-4. Composer（@ 引用数据源）+ 会话侧栏最小版
-5. 上传页 + 画像预览卡
+## 5. N4 信任与稳健（约 1 周）—— change `trust-hardening`
 
-验收：DoD #1——上传 100MB CSV → 提问 → 图表落画布，全程无刷新。
-产出：可给 3-5 个真实用户试用的版本，用反馈决定 M4 细节优先级。
+1. 审批弹窗升级：verifier 命中项 + processor diff 预览；option_template 注入面渲染器单测
+2. replay/审批审计查询页；资产全生命周期视图
+3. 历史压缩（memory/：ProcessHistory + CompactionPart）；并发 save CAS 用例
+4. folder 自动重扫（watchdog 或 cron，依 N1 实测）；SQL 连接串加密与轮换 UI
+5. 断线双通道恢复打磨；错误页/结构化日志；PNG/CSV 导出补齐
+6. 打 tag **v0.1.0 = MVP 完成**
 
-## 5. M4 信任层（约 4-5 天）——从「能聊」到「可信」
+**验收**：DoD #4 四条 + 旧 DoD #4/#5 语义平移（断网重连、审计日志）。
 
-1. artifact store + 产物画布（ChartCard / TableCard / FileCard / 下载）
-2. plot_chart 完整实现：ChartSpec → ECharts option + 数据快照
-3. AST 危险模式 → 审批型 deferred tool + ConfirmDialog（批准/拒绝/改写）
-4. 修复横幅 n/3、成本徽章、FinalAnswer.numbers 数值追溯面板
-5. 隐私模式全链路：prompt 侧脱敏 + 审计日志
+## 6. v1+ 向外扩展（每项 = 一层薄封装，构建在画布模型之上）
 
-验收：DoD #3（审批拒绝后 Agent 给替代方案）+ DoD #5（日志可审计不含原始行）。
+- 向量检索 `search_schema`（defer_loading 复活）/ 知识库口径 / 经验库（成功轨迹）——memory 层新实现
+- PG/MySQL 连接器全量 / 容器沙箱——**kernel 与 reader 换实现，接口不变**
+- HTML 报告：画布资产 → 报告导出（新表述，替代旧"报告组装"）
+- JWT 多用户 + 审计强化 · Arrow 引用式渲染（>2MB 产物）
+- Data Threads 分支探索 / 语义层（Dataset 画像 → MDL）/ AIDE 式指标搜索
 
-## 6. M5 稳健层（约 3-4 天）——日常可用
+规律不变：v1 每一项都不动 spine。层边界冻结的价值在此兑现。
 
-1. 会话持久化完善 + 前端 resume 体验
-2. 轮次压缩（超过阈值触发历史摘要）
-3. 熔断打磨 / 错误页 / 结构化日志（Logfire 可选）
-4. PNG / XLSX 导出；部署：FastAPI StaticFiles 同域托管或 docker-compose
+## 7. 过程实践
 
-验收：DoD #4（断网 10s 重连完整恢复）。打 **tag v0.1.0——MVP 完成**。
+- **OpenSpec 驱动**：N1-N4 各一个 change（propose → apply → archive），验收直接抄本文各节；旧 m1-engine-layer change 已删除（未提交未实现，不进归档）
+- **演示脚本制**：每层录 2 分钟 demo；N2 的"零 AI 三卡重跑"是 v3 产品论点的活广告
+- **fixture 回归集**：3 种子 processor + 20 标准问句 + 错列名/隐私/大 payload 负例，每次动 spine 必跑
+- **分支策略**：main 永远可跑；现存的 agent / data-processor / data-repoter 三个空分支不合用即删，N 阶段用 `n1-data-catalog` 等新名
 
-## 7. MVP 之后的向外扩展（每项 = 一层薄封装）
+## 8. 工期粗估
 
-v1 产品层（按需排序）：
-- DB 连接器：`load_database` 工具 + 连接管理（数据服务的新实现，引擎不动）
-- 知识库/口径：复用 `search_schema` 位，接入向量库知识分区（VA 思想）
-- 经验库：成功轨迹提炼入库（TW experience）
-- HTML 报告组装与分享 · JWT 多用户 + 审计 · 容器沙箱（**kernel_runner 换实现，接口不变**）
-
-v2 差异化：Data Threads（Run 树化）→ 语义层/指标口径（画像升级为 MDL）→ 指标型任务切树搜索（AIDE）。
-
-规律：v1 每一项都不动 spine——连接器是 data 层新实现、知识库是 memory 层新实现、沙箱是 exec 层新实现。层边界冻结的价值在这里兑现。
-
-## 8. 过程实践
-
-- **OpenSpec 驱动**：每个 M = 一个 change 提案（propose → apply → archive），验收直接抄本文各节
-- **演示脚本制**：每层结束录 2 分钟 demo，进度可见
-- **fixture 回归集**：3-5 个固定数据集 + 20 个标准问句，每次动 spine 必跑
-- **分支策略**：main 永远可跑；M 层 feature 分支，验收后合入打 tag
-
-## 9. 工期粗估
-
-全职：M0-M5 ≈ 4 周（M0 3-5 天 / M1 1 周 / M2 3-4 天 / M3 1 周 / M4 4-5 天 / M5 3-4 天）；业余时间约 ×3。最大不确定项是 Spike A 与 M2 桥接（协议在演进），所以放在最前面消化。
+全职：N1-N4 ≈ 4-5 周（N1 1 周 / N2 1.5 周 / N3 1.5 周 / N4 1 周）；业余 ×3。最大不确定项 = **重放确定性与 clean kernel 冷启动**（N2 首日消化），次项 = TestModel 多步工具环脚本复杂度（N3 先做最小闭环验证）。

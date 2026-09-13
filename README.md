@@ -2,7 +2,7 @@
 
 数据分析 Agent：后端 uv + FastAPI + PydanticAI v2 + 常驻 Jupyter 内核；前端 bun + Vite + React 19 + ai-elements + ECharts。
 
-设计文档：`design-architecture.md`（v2 架构）· `agent-design.md`（Agent 配置与功能清单）· `implementation-roadmap.md`（M0-M5 路线图）。
+设计文档：`design-architecture.md`（v3 三层架构：数据导入 / 画布资产 / AI 编码对话框）· `agent-design.md`（编码 Agent 配置与 v3 DoD）· `implementation-roadmap.md`（M0 已完成 + N1-N4 路线图）。
 
 ## 仓库结构
 
