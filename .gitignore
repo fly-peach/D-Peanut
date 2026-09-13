@@ -21,3 +21,6 @@ dist/
 
 # 非本仓库工具残留
 .pi/
+
+# docker compose 本地变量（机器相关，不入库）
+.env
