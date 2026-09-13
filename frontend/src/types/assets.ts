@@ -75,6 +75,7 @@ export interface AssetIndexRow {
   gate_passed: boolean | null
   gate_at: string | null
   has_render: boolean
+  stale_data: boolean
 }
 
 export interface RenderBundle {

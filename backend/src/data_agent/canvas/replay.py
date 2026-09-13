@@ -168,6 +168,7 @@ class ReplayService:
             self.assets.write_render(asset.id, render.model_dump(), config.model_dump())
             if asset.status in (AssetStatus.draft, AssetStatus.broken):
                 asset.status = AssetStatus.validated
+            asset.stale_data = False  # replayed against current data -> drift cleared
         self.assets.update(asset)
         self.assets.record_replay(asset.id, asset.version, trigger, report.passed,
                                   report.errors, report.elapsed_s, report.ran_at)

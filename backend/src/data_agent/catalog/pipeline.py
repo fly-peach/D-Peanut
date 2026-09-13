@@ -123,6 +123,21 @@ class CatalogPipeline:
         """file: re-stat + re-profile if revision moved; folder: diff; sql: re-reflect."""
         return self.run(dataset_id)
 
+    def rescan_all_folders(self) -> set[str]:
+        """N4 auto-rescan tick: re-scan every folder, return names of datasets whose
+        revision moved (callers mark bound assets stale). Cheap: mtime+size only."""
+        from .models import DatasetKind
+
+        changed: set[str] = set()
+        for brief in self.repo.list(DatasetKind.folder):
+            before = {c.name: c.revision for c in self.repo.children(brief.id)}
+            self.run(brief.id)
+            after = {c.name: c.revision for c in self.repo.children(brief.id)}
+            for name, rev in after.items():
+                if before.get(name) != rev:
+                    changed.add(name)
+        return changed
+
     def _conn_target(self, ds: Dataset) -> str:
         target = self.settings.secrets.get(ds.meta.conn_ref)
         if not target:

@@ -17,6 +17,8 @@ from .tools import register_all
 
 
 def build_agent() -> Agent[AgentDeps, Any]:
+    from ..memory.compaction import make_capability
+
     agent = Agent(
         "test",  # placeholder model; ChatRunner overrides per run
         deps_type=AgentDeps,
@@ -24,6 +26,7 @@ def build_agent() -> Agent[AgentDeps, Any]:
         instructions=STATIC_INSTRUCTIONS,
         retries=2,
         end_strategy="graceful",
+        capabilities=[make_capability()],  # N4: fold old turns, keep recency
     )
 
     @agent.instructions

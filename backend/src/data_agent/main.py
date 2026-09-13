@@ -1,5 +1,8 @@
 """FastAPI assembly: routes, CORS, optional static hosting (docker/prod)."""
 
+import asyncio
+import contextlib
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -20,6 +23,7 @@ from .canvas.replay import ReplayService
 from .catalog.pipeline import CatalogPipeline
 from .catalog.registry import CatalogRepository
 from .exec.kernel_pool import KernelPool
+from .observability import setup_logging
 from .runs.store import RunStore
 from .runs.stream import ChatRunner
 from .settings import SettingsService, Workspace
@@ -47,9 +51,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.canvas = SimpleNamespace(assets=canvas_assets, repo=repo, replay=replay_service)
     app.state.chat_runner = ChatRunner(settings, store, pipeline, repo,
                                        canvas_assets, replay_service, session_kernels)
+    setup_logging(settings.secrets)
+
+    async def _auto_rescan() -> None:
+        """N4 periodic folder sweep (opt-in via settings, default off)."""
+        while True:
+            interval = float(settings.get_setting("auto_rescan_interval_s", 0) or 0)
+            if interval <= 0:
+                await asyncio.sleep(30)
+                continue
+            await asyncio.sleep(interval)
+            try:
+                changed = pipeline.rescan_all_folders()
+                if changed:
+                    n = canvas_assets.mark_stale_for_datasets(changed)
+                    logging.getLogger("data_agent.rescan").info(
+                        "auto-rescan: %s datasets moved, %s assets flagged stale",
+                        len(changed), n)
+            except Exception:  # noqa: BLE001 — the sweep must survive its own errors
+                logging.getLogger("data_agent.rescan").exception("auto-rescan tick failed")
+
+    sweeper = asyncio.create_task(_auto_rescan())
     try:
         yield
     finally:
+        sweeper.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sweeper
         replay_pool.shutdown_all()
         session_kernels.shutdown_all()
 
