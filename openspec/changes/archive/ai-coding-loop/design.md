@@ -73,3 +73,16 @@ POST /api/runs/{run_id}/cancel     # 会话内核 interrupt + run failed
 ## 已冻结（N3 末回填）
 
 - （待填）十工具签名 / UIMessage 事件归属表
+
+## 已冻结（N3 末，只加不改）
+
+十工具签名（tools.py）：browse_datasource(name_prefix?,kind?) / inspect_profile(dataset,
+columns?,sample_rows?) / query_data(dataset,sql,limit) / run_in_kernel(code,purpose)->
+ToolReturn[ExecSummary]{metadata.code_ref} / read_asset(asset_id) / write_processor(source,
+bindings,name?,asset_id?,params?,chart_type)⚑ / validate_asset(asset_id) / patch_params
+(asset_id,params) / save_asset(asset_id,canvas?)⚑ / emit_adhoc_chart(title,render,config,
+code_ref)→"…(adhoc: ad_xxx)"。⚑=requires_approval。
+事件归属：text-*|tool-*|tool-approval-request|data-asset-changed|data-run|finish；
+[chat] deps→dispatch dict 转换在 adapter 内——服务侧必须持有 RunState 原始引用。
+审批续跑 = 第二次 /chat（AI SDK v6 approval parts + sendAutomaticallyWhen 判全部
+approval-responded）；UsageLimits(request/token/cost) 原生承载 max_steps 与预算。

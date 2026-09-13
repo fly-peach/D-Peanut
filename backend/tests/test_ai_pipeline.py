@@ -213,3 +213,19 @@ def test_llm_test_with_test_provider(client):
     client.put("/api/settings", json={"settings": {"llm_provider": "test"}})
     body = client.post("/api/settings/llm/test").json()
     assert body["ok"] is True
+
+
+def test_promote_seed_flow(client):
+    """adhoc persisted -> promote yields draft + provenance chain + seed msg."""
+    store = client.app.state.store
+    aid = store.save_adhoc("se_x", None, {"title": "t", "render": {}, "config": {}}, BAR_SRC)
+    r = client.post("/api/assets/promote", json={"adhoc_id": aid, "name": "promoted_card"})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["status"] == "draft"
+    assert "seed_message" in body
+    asset = client.get(f"/api/assets/{body['asset_id']}").json()["asset"]
+    assert asset["provenance"]["created_by"] == "promote"
+    assert asset["provenance"]["adhoc_id"] == aid
+    assert asset["param_spec"][0]["key"] == "top_n"  # PARAM_SPEC literal extracted
+    assert client.post("/api/assets/promote", json={"adhoc_id": "ad_missing"}).status_code == 404

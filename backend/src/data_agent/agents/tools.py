@@ -321,5 +321,5 @@ def emit_adhoc_chart(ctx: RunContext[AgentDeps], title: str, render: dict[str, A
     source = cached["code"] if cached else ""
     payload = {"title": title, "render": render, "config": config, "code_ref": code_ref}
     aid = deps.store.save_adhoc(deps.state.session_id, deps.state.run_id, payload, source)
-    return ToolReturn(f"已出一次性图：{title}",
+    return ToolReturn(f"已出一次性图：{title} (adhoc: {aid})",
                       metadata={"kind": "adhoc", "adhoc_id": aid, "payload": payload})

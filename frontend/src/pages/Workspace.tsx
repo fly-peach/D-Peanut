@@ -4,11 +4,12 @@
 import { Database, Folder, FileText, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
+import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ChartCard } from '@/components/canvas/ChartCard'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCatalogStore } from '@/stores/catalogStore'
+import { useChatStore } from '@/stores/chatStore'
 import { stopCatalogPolling } from '@/stores/catalogStore'
 import { BAR_TOPN_SOURCE } from '@/lib/seedProcessors'
 
@@ -115,26 +116,41 @@ function CanvasArea() {
 }
 
 function RightAiPanel() {
+  const aiEnabled = useChatStore((s) => s.aiEnabled)
+  const sessions = useChatStore((s) => s.sessions)
+  const activeSid = useChatStore((s) => s.activeSid)
+  const select = useChatStore((s) => s.select)
+  const newSession = useChatStore((s) => s.newSession)
+  const loadSessions = useChatStore((s) => s.loadSessions)
+  useEffect(() => {
+    void loadSessions()
+  }, [loadSessions])
+
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l bg-sidebar">
+    <aside className="flex w-96 shrink-0 flex-col border-l bg-sidebar">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Sparkles className="size-4 text-primary" />
         <span className="text-sm font-medium">AI 编码面板</span>
-        <span className="bg-secondary text-muted-foreground ml-auto rounded-full px-2 py-0.5 text-[10px]">N3 启用</span>
+        {aiEnabled
+          ? <span className="bg-primary/10 text-primary ml-auto rounded-full px-2 py-0.5 text-[10px]">ON</span>
+          : <span className="bg-secondary text-muted-foreground ml-auto rounded-full px-2 py-0.5 text-[10px]">OFF</span>}
+        <Button size="xs" variant="outline" onClick={() => void newSession()}>新会话</Button>
       </div>
-      <div className="flex-1 p-3">
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          这里是数据画布的“作者”。到 N3（ai-coding-loop）阶段，它将支持：
-          自然语言 → 试跑内核验证 → write_processor（审批弹窗）→
-          闸门自修 → save_asset 落画布；轻模式即席问数；promote 转卡；
-          以及顶部 AI toggle 的开关在场控制。
-        </p>
-        <div className="text-muted-foreground/60 mt-6 rounded-lg border border-dashed p-4 text-center text-xs">
-          对话输入将在 N3 接入 useChat 流
+      {sessions.length > 1 && (
+        <div className="flex gap-1 overflow-x-auto border-b px-2 py-1">
+          {sessions.slice(0, 8).map((s) => (
+            <button key={s.id} onClick={() => select(s.id)}
+                    className={`shrink-0 rounded px-2 py-0.5 text-[10px] ${
+                      s.id === activeSid ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent'}`}>
+              {s.title || s.id.slice(3, 9)}
+            </button>
+          ))}
         </div>
-      </div>
-      <div className="border-t px-3 py-2">
-        <Input disabled placeholder="AI 面板未启用（N3）" className="h-7 text-xs" />
+      )}
+      <div className="min-h-0 flex-1">
+        {activeSid ? <ChatPanel /> : (
+          <p className="text-muted-foreground p-4 text-center text-xs">点「新会话」开始与 AI 协作</p>
+        )}
       </div>
     </aside>
   )
