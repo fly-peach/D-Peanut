@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `openspec/changes/` — 进行中的 change（proposal/design/tasks + delta specs），完成后归档至 `changes/archive/`
 - 根目录三份设计文档是需求的唯一事实源，**均已升 v3**：`design-architecture.md`（三层架构、§2.6 核心契约、§3.2 事件面分工）、`agent-design.md`（编码 Agent 配置、十工具、v3 DoD）、`implementation-roadmap.md`（N1-N4 路线图）
 
-新功能开发先建 openspec change 再动代码；按 N 阶段推进：**M0、N1（data-catalog）已完成归档，当前在 N2 `canvas-assets`**（随后 ai-coding-loop / trust-hardening → tag v0.1.0 = MVP）。旧 m1/m2（M1-M5）里程碑体系已随 v3 重定义作废。生效 specs：agent-scaffold、data-catalog（N1 冻结的 Dataset 契约见其 spec 与 changes/archive/data-catalog/design.md「已冻结」段）。
+新功能开发先建 openspec change 再动代码；**M0 + N1-N4 全部完成 = MVP v0.1.0（tag）**。生效 specs 五条：agent-scaffold、data-catalog、canvas-assets、ai-coding-loop、trust-hardening；各阶段「已冻结」段在 changes/archive/<name>/design.md，冻结后只加不改。下一步是 v1 扩展（roadmap §6：知识库/连接器/报告/多用户）或 MVP 反馈迭代。
 
 ## 常用命令
 
@@ -51,15 +51,20 @@ WSL 性能注意：仓库挂载在 /mnt/*（DrvFS）时，`export UV_PROJECT_ENV
 
 ### 后端 `backend/src/data_agent/`
 
-v3 三层包结构（design-architecture §2.2 为事实源；catalog/ 与 settings/secrets 已实现，canvas/agents 待 N2-N3）：
+v3 三层包结构（design-architecture §2.2 为事实源；全部已实现）：
 
-- `catalog/`（N1 ✅）— 数据导入层：file/folder/sql Dataset 注册（jail+异步扫描画像）、
-  树指纹增量 rescan、≤500 token 画像、`reader.read_dataset/count_rows` 统一读契约（N2/N3 必须复用）；
-  `settings.py`+`secrets_store.py` 三层配置（env/settings 表/secrets.json 0600 掩码）；前端数据源页已上线
-- `canvas/`（N2）— 画布层：ChartAsset、clean kernel 重放池、输出 schema 闸门；**不 import agents**（AI 关掉画布照常活）
-- `agents/`（N3）— AI 编码环：十工具（run_in_kernel/write_processor/validate_asset/save_asset/emit_adhoc_chart…）+ deferred 审批
+- `catalog/` ✅ — 数据导入层：file/folder/sql Dataset 注册（jail+异步扫描画像）、
+  树指纹增量 rescan + 自动重扫（settings.auto_rescan_interval_s）、≤500 token 画像、
+  `reader.read_dataset/count_rows` 统一读契约；`settings.py`+`secrets_store.py` 三层配置
+  （env/settings 表/secrets.json 0600 掩码）
+- `canvas/` ✅ — 画布层：ChartAsset（FS 权威+索引/CAS/版本/漂移→broken）、clean kernel 预热池
+  （%reset 隔离）、schema 闸门（子集列/dtype 族/行界/2MB）；**不 import agents**；stale_data 漂移标记
+- `agents/` ✅ — AI 编码环：十工具薄壳 + requires_approval×2（write_processor/save_asset）+
+  verifier 条件审批（run_in_kernel/query_data 抛 ApprovalRequired）；审批续跑=第二次 /chat
+- `memory/compaction.py` ✅ — ProcessHistory 历史压缩（>24 折旧保 16，资产 ID 存活）
+- `observability.py` ✅ — 日志统一脱敏 filter
 - `exec/` — `kernel_pool.py`（✅ 唯一已实现的硬资产：每会话 ipykernel 子进程，跨调用变量常驻，超时中断可恢复）、`runner.py`、`verifier.py`（AST 分级校验，试跑与重放共用）
-- `runs/` — `stream.py` VercelAIAdapter granular 三方法桥接 AI 面 UIMessage SSE；画布数据本体走 REST，事件面分工见 design-architecture §3.2
+- `runs/` ✅ — `stream.py` ChatRunner（adapter granular 桥 + data-asset-changed/data-run 注入于 finish 前 + chunk 流重建恢复副本，GET /sessions/{sid}/messages）；store 承载 sessions/messages/runs/run_steps/adhoc。**adapter 会把 dataclass deps 转 dispatch dict——跨 await 必须持 RunState 原始引用**；UsageLimits(request/token/cost) 承载 max_steps 与预算熔断
 - `api/` `main.py` — FastAPI 路由（`/api` 前缀）；`DATA_AGENT_STATIC_DIR` 指向目录时同域托管前端；运行期数据在 `workspace/`（index.db/secrets.json/assets 目录，N1 起建）
 
 ### 前端 `frontend/src/`
