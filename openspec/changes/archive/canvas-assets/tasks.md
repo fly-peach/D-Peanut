@@ -31,5 +31,5 @@
 
 ## 6. 部署与验收
 - [ ] 6.1 docker 重建起服务：API 级 e2e（建卡/replay/失败留屏）+ browser-use 截图三张（画布出图/参数表单/闸门失败态）；daemon 问题先修（close --all/日志/~/.config/browser-harness）
-- [ ] 6.2 DoD #2 四条自动化断言全绿；回归 68+N 全绿、ruff 零告警
-- [ ] 6.3 design.md 回填「已冻结」段；归档本 change（spec 合入 specs/）
+- [x] 6.2 DoD #2 四条自动化断言全绿；回归 68+N 全绿、ruff 零告警
+- [x] 6.3 design.md 回填「已冻结」段；归档本 change（spec 合入 specs/）

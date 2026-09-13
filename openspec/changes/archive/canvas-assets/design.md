@@ -73,3 +73,13 @@ DELETE /api/assets/{id}
 ## 已冻结（N2 末回填区，验收时填写）
 
 - （待填）processor 协议 / RenderData / ChartConfig / GateReport / replay 语义
+
+## 已冻结（N2 末，只加不改）
+
+- `process(ctx) -> (RenderData, ChartConfig)`；`PARAM_SPEC/DEFAULTS` 必须为字面量（AST 可提取）
+- `RenderData{tables{dim,列式source}, row_count, payload_bytes}`；`ChartConfig{chart_type∈8白名单,
+  option_template 纯 JSON, data_map{通道→"table.column"}, appearance}`
+- `GateReport{passed, checks[], errors[]}`；闸门顺序 columns(子集)→dtype族→行界→2MB→30s；
+  draft 首闸盖章 = 当次输出
+- 端点形态：create 即验、replay 200+passed:false（4xx 只留给操作错误）、PUT params CAS
+- 资产目录布局 asset/{meta.json, processor.py, params.json, versions/, render.json, config.json}
