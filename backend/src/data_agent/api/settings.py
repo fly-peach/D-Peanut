@@ -1,8 +1,7 @@
 """GET|PUT /api/settings — runtime config merged view (secrets masked).
 
-N1 skeleton: budgets/privacy defaults now; LLM form + POST /settings/llm/test land
-with N3 model_factory (N1/N2 are zero-AI paths, users must not be forced to set keys).
-"""
+N3 adds the LLM plane: llm_provider/llm_base_url/llm_model/temperature/... live in
+the settings table; api key in secrets (masked); POST /llm/test pings the model."""
 
 from __future__ import annotations
 
@@ -30,3 +29,14 @@ def write_settings(patch: SettingsPatch, request: Request) -> dict[str, Any]:
         settings=patch.settings,
         secrets={k: v for k, v in (patch.secrets or {}).items()},
     )
+
+
+@router.post("/llm/test")
+async def test_llm(request: Request) -> dict[str, Any]:
+    """One minimal real request with SAVED settings (frontend saves before testing)."""
+    from ..agents.model_factory import ping_model
+    from ..runs.stream import settings_to_run_settings
+
+    svc = request.app.state.settings
+    rs = settings_to_run_settings(svc)
+    return await ping_model(rs, svc.secrets.get("llm.api_key"))

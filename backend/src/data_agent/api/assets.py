@@ -184,6 +184,46 @@ def history(asset_id: str, request: Request) -> dict[str, Any]:
         raise _err(404, "asset not found") from None
 
 
+class PromoteBody(BaseModel):
+    adhoc_id: str
+    name: str | None = None
+
+
+@router.post("/promote", status_code=201)
+def promote_adhoc(body: PromoteBody, request: Request) -> dict[str, Any]:
+    """Light->heavy: deterministic seed from the adhoc's producing code, then the
+    AI rewrites it into a replay-legal processor before save (two approvals)."""
+    from ..canvas.models import ProvenanceInfo
+    from ..canvas.sourcecheck import extract_literals
+
+    svc = _svc(request)
+    adhoc = request.app.state.store.get_adhoc(body.adhoc_id)
+    if adhoc is None:
+        raise _err(404, "adhoc not found")
+    source = adhoc["source_code"] or (
+        "PARAM_SPEC = []\nDEFAULTS = {}\n\n\ndef process(ctx):\n    raise NotImplementedError\n"
+    )
+    spec_raw, defaults = extract_literals(source)
+    try:
+        spec = [ParamField(**p) for p in spec_raw]
+    except Exception:  # noqa: BLE001 — bad seed spec just means AI re-declares it
+        spec = []
+    chart_type = str(((adhoc["payload"].get("config") or {}).get("chart_type")) or "bar")
+    asset = ChartAsset(
+        name=body.name or f"promoted_{adhoc['id'][:8]}",
+        param_spec=spec,
+        params=defaults,
+        chart_type=chart_type,
+        provenance=ProvenanceInfo(created_by="promote", adhoc_id=adhoc["id"],
+                                  session_id=adhoc.get("session_id")),
+    )
+    asset = svc.assets.create(asset, source)
+    seed = (f"资产 {asset.id} 已从即席图 {adhoc['id']} seed（provenance=promote）。"
+            f"请把它改写为合规 processor：用 ctx.data 重读绑定数据、聚合后返回 "
+            f"(RenderData, ChartConfig)，write_processor 修订 → validate_asset 过闸 → save_asset。")
+    return {"asset_id": asset.id, "status": asset.status.value, "seed_message": seed}
+
+
 @router.delete("/{asset_id}", status_code=204)
 def delete_asset(asset_id: str, request: Request) -> None:
     try:

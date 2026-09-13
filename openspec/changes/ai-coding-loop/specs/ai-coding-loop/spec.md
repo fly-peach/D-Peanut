@@ -1,0 +1,75 @@
+# ai-coding-loop Specification
+
+## ADDED Requirements
+
+### Requirement: 编码 Agent 工具环（十工具签名冻结）
+
+系统 SHALL 提供 coding agent（模型经 RunSettings 注入，OpenAI 兼容网关与 test 提供者），
+工具集为 browse_datasource / inspect_profile / query_data / run_in_kernel / read_asset /
+write_processor / validate_asset / patch_params / save_asset / emit_adhoc_chart；
+write_processor 与 save_asset 需人工审批，save_asset 强制 status=validated，
+reflect（执行失败重试）≤3、max_steps=12、token/费用预算熔断。
+
+#### Scenario: 错列名自动修复
+
+- **WHEN** 脚本化模型先用不存在的列 run_in_kernel，收到 traceback 后修正重跑并走完
+  write→validate→save
+- **THEN** 出现 ≥1 次失败回灌与最终 validated；事件流含试跑代码、闸门 GateReport
+  摘要、data-asset-changed 与 data-final；成本落 Run 表
+
+#### Scenario: save 未过闸被拒
+
+- **WHEN** validate 从未通过的资产直接 save_asset
+- **THEN** 服务端拒绝并返回需先过闸的提示，资产保持 draft
+
+### Requirement: 审批门与续跑（AI SDK 原生二段流）
+
+危险执行（verifier blocked）与写资产 SHALL 转 approval-request：run 以
+DeferredToolRequests 结束并发出 tool-approval-request 帧；用户决议经第二次 /chat
+携完整消息历史续跑（deferred_tool_results）；拒绝后模型收到 denial 且不得重试同一调用。
+
+#### Scenario: 批准后继续
+
+- **WHEN** write_processor 挂起 → 前端批准 → 续跑请求进入
+- **THEN** 资产以审批决议继续执行到 save，全程同一 message id 流式衔接
+
+#### Scenario: 拒绝给替代
+
+- **WHEN** 审批被拒绝
+- **THEN** 模型收到 denial 信息，最终 FinalAnswer 给替代方案而非重复提交写请求
+
+### Requirement: UIMessage 事件归属表（冻结）
+
+AI 面事件 SHALL 按归属表输出：text-* / tool-input-* / tool-output-available(ExecResult
+摘要+全量入 Run 表) / tool-approval-request / data-asset-changed(仅通知不含数据本体) /
+adhoc 图经 ToolReturn.metadata / data-final / data-run+finish；画布数据本体只走 REST。
+断线续传=第二次 /chat 携历史；AI toggle 关闭时 /chat 返回 409。
+
+#### Scenario: 通知帧不携数据
+
+- **WHEN** save_asset 成功
+- **THEN** 流内 data-asset-changed 仅含 {asset_id, version, gate_passed, trigger:"ai"}，
+  渲染数据由前端 GET /api/assets/{id}/render 获取
+
+### Requirement: 轻模式与 promote
+
+即席问数 SHALL 经 emit_adhoc_chart 输出一次性卡（不落资产）；promote 端点将 adhoc 的
+源码与字面量参数固化为 draft 资产（provenance=promote），并注入改写请求由 AI 完成
+合规 processor。
+
+#### Scenario: 阅后即焚与沉淀
+
+- **WHEN** 问"总 GMV" → adhoc 卡；用户点"转为图表卡"
+- **THEN** 不建资产的问数即时返回；promote 后存在 draft 资产且 provenance 链指向
+  adhoc_id，随后 AI 过闸 save 成为画布卡
+
+### Requirement: 模型配置热生效
+
+Settings SHALL 管理 provider 预设/base_url/模型名/temperature（敏感 key 存 secrets
+掩码回显），model_factory 每 Run 现构模型实例；POST /api/settings/llm/test 发最小
+真实请求并透出可自诊错误；AI toggle 持久于 settings。
+
+#### Scenario: 无密钥测试连接
+
+- **WHEN** 未配置 key 点击测试连接
+- **THEN** 返回 {ok:false, error 含缺 key/网络原因}，不抛 5xx
