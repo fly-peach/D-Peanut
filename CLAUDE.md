@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `openspec/changes/` — 进行中的 change（proposal/design/tasks + delta specs），完成后归档至 `changes/archive/`
 - 根目录三份设计文档是需求的唯一事实源，**均已升 v3**：`design-architecture.md`（三层架构、§2.6 核心契约、§3.2 事件面分工）、`agent-design.md`（编码 Agent 配置、十工具、v3 DoD）、`implementation-roadmap.md`（N1-N4 路线图）
 
-新功能开发先建 openspec change 再动代码；按 N 阶段推进：**M0 已完成，下一个是 N1 `data-catalog`**（随后 canvas-assets / ai-coding-loop / trust-hardening）。旧 m1/m2（M1-M5）里程碑体系已随 v3 重定义作废。
+新功能开发先建 openspec change 再动代码；按 N 阶段推进：**M0、N1（data-catalog）已完成归档，当前在 N2 `canvas-assets`**（随后 ai-coding-loop / trust-hardening → tag v0.1.0 = MVP）。旧 m1/m2（M1-M5）里程碑体系已随 v3 重定义作废。生效 specs：agent-scaffold、data-catalog（N1 冻结的 Dataset 契约见其 spec 与 changes/archive/data-catalog/design.md「已冻结」段）。
 
 ## 常用命令
 
@@ -51,9 +51,11 @@ WSL 性能注意：仓库挂载在 /mnt/*（DrvFS）时，`export UV_PROJECT_ENV
 
 ### 后端 `backend/src/data_agent/`
 
-v3 三层包结构（design-architecture §2.2 为事实源；当前仅 exec/ 与 runs/ 骨架有真实现，其余为占位待 N1-N3 落地）：
+v3 三层包结构（design-architecture §2.2 为事实源；catalog/ 与 settings/secrets 已实现，canvas/agents 待 N2-N3）：
 
-- `catalog/`（N1）— 数据导入层：file/folder/sql Dataset 注册、扫描指纹、画像、DuckDB 读取；sqlite 索引 + workspace FS
+- `catalog/`（N1 ✅）— 数据导入层：file/folder/sql Dataset 注册（jail+异步扫描画像）、
+  树指纹增量 rescan、≤500 token 画像、`reader.read_dataset/count_rows` 统一读契约（N2/N3 必须复用）；
+  `settings.py`+`secrets_store.py` 三层配置（env/settings 表/secrets.json 0600 掩码）；前端数据源页已上线
 - `canvas/`（N2）— 画布层：ChartAsset、clean kernel 重放池、输出 schema 闸门；**不 import agents**（AI 关掉画布照常活）
 - `agents/`（N3）— AI 编码环：十工具（run_in_kernel/write_processor/validate_asset/save_asset/emit_adhoc_chart…）+ deferred 审批
 - `exec/` — `kernel_pool.py`（✅ 唯一已实现的硬资产：每会话 ipykernel 子进程，跨调用变量常驻，超时中断可恢复）、`runner.py`、`verifier.py`（AST 分级校验，试跑与重放共用）
