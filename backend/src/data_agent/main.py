@@ -1,15 +1,30 @@
 """FastAPI assembly: routes, CORS, optional static hosting (docker/prod)."""
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .api.sessions import router as sessions_router
+from .api.settings import router as settings_router
+from .settings import SettingsService, Workspace
 
-app = FastAPI(title="data-agent", version="0.0.1")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    workspace = Workspace.from_env()
+    workspace.ensure_runtime()
+    app.state.workspace = workspace
+    app.state.settings = SettingsService(workspace)
+    yield
+
+
+app = FastAPI(title="data-agent", version="0.0.1", lifespan=lifespan)
 app.include_router(sessions_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 @app.get("/healthz")
