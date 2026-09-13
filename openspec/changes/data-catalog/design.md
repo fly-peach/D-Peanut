@@ -61,3 +61,12 @@ GET|PUT /api/settings              SettingsService 骨架：GET 合并 settings 
   schema_hash）；漂移只标 stale 不通知。
 - **folder 中途失败**：单 child 画像炸不拖垮整批（逐 child try，失败标 failed + last_error）。
 - zustand/轮询是前端新面：与 M0 静态演示页并存，Workspace 主页 N3 才做。
+
+## 已冻结（N1 末，只加不改）
+
+- `DatasetRef{dataset_id, name, revision}`（catalog/models.py）
+- `Dataset`（kind=file|folder|sql；status 枚举；privacy_mode 三态 None=跟随全局）+
+  `FileMeta/FolderMeta/SqlMeta`（SqlMeta 只存 conn_ref）
+- `TableProfile/ColumnProfile`（含 is_time/pk_hint/top_values/sample_values）
+- `read_dataset(ds, *, conn_target?, columns?, limit?)` / `count_rows(ds, *, conn_target?)`
+  （catalog/reader.py——N2 bindings 懒加载与 N3 query_data 必须复用此入口）

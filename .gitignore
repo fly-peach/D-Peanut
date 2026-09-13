@@ -18,3 +18,6 @@ dist/
 .npm-cache/
 .DS_Store
 *.log
+
+# 非本仓库工具残留
+.pi/
