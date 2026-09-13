@@ -194,9 +194,16 @@ sessions · messages · runs(status, usage, cost, resume_id, approval 记录) ·
 
 ## 4. 前端设计（bun + Vite + ai-elements + echarts）
 
-### 4.1 初始化
+### 4.1 初始化与风格基线
 
 不变（create-vite → Tailwind4+shadcn → ai-elements 装件 → `bun add @ai-sdk/react echarts @tanstack/react-table zustand`）。
+
+**风格 token 基线 = linear-app**（open-design 设计系统库，dark-first：近黑分层底、
+半透明白细描边、Inter 510、单靛紫 accent、近无彩 UI 把彩色留给图表；Radix 基座与
+shadcn 组件同源零迁移）。落地=N2 画布页首日把其 tokens.css 翻译进 index.css 的
+`--background/--foreground/--primary/--chart-1..5` 变量（亮色回退用现有 shadcn 值）；
+`--chart-1..5` 同时是 ECharts 默认 `appearance.color_palette` 来源——UI/主题/图表一套 token。
+页面布局不套任何现成模板（dashboard 类原型与三栏工作台不匹配），自绘。
 
 ### 4.2 目录与页面
 
