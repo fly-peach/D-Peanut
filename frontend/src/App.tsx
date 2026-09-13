@@ -1,13 +1,15 @@
 import { useState } from 'react'
 
 import DatasourcesPage from '@/pages/Datasources'
-import WorkspaceDemo from '@/pages/WorkspaceDemo'
+import Settings from '@/pages/Settings'
+import Workspace from '@/pages/Workspace'
 
-type Tab = 'workspace' | 'datasources'
+type Tab = 'workspace' | 'datasources' | 'settings'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'workspace', label: '工作台' },
   { id: 'datasources', label: '数据源' },
+  { id: 'settings', label: '设置' },
 ]
 
 function App() {
@@ -30,8 +32,13 @@ function App() {
             {t.label}
           </button>
         ))}
+        <span className="bg-primary ml-auto inline-block size-2 rounded-full" title="服务在线" />
       </header>
-      <div className="min-h-0 flex-1">{tab === 'workspace' ? <WorkspaceDemo /> : <DatasourcesPage />}</div>
+      <div className="min-h-0 flex-1">
+        {tab === 'workspace' && <Workspace />}
+        {tab === 'datasources' && <DatasourcesPage />}
+        {tab === 'settings' && <Settings />}
+      </div>
     </div>
   )
 }
