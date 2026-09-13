@@ -26,6 +26,6 @@
 ## 3. 部署与收尾
 - [x] 3.1 docker 重建 + 全 e2e（三旅程脚本：注册→AI 建卡(approve)→改数据→重跑→promote→
       toggle 关→表单）curl 级
-- [ ] 3.2 browser-use 截图（网络环境修复后；否则标注遗留）
+- [ ] 3.2 browser-use 截图【遗留·环境阻塞】：Windows→WSL 入站被拦（curl 000，容器内 e2e 全绿）；需 wsl --shutdown 重建 relay（会中断同机其它容器，待用户择时）
 - [x] 3.3 DoD #4 断言全绿；回归全绿 + ruff；spec/README/CLAUDE 同步；归档；
       merge main；tag v0.1.0
