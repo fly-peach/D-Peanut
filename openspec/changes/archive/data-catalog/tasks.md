@@ -60,7 +60,7 @@
 - [x] 5.2 回归：ruff check 零告警；uv run pytest 全绿（含既有 spike A/B 8 测试）；
       bun run build 零错误
 - [x] 5.3 `specs/data-catalog/spec.md` 场景→测试映射核对（每条 Requirement 有对应测试）
-- [ ] 5.4 冻结记录：Dataset / DatasetRef / TableProfile / read_dataset 四契约字段写入
+- [x] 5.4 冻结记录：Dataset / DatasetRef / TableProfile / read_dataset 四契约字段写入
       design.md「已冻结」段；归档本 change（delta specs 合并进 openspec/specs/）
 
 ## 6. 场景→测试映射（5.3）
