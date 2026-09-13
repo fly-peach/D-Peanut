@@ -8,6 +8,14 @@ services:
     ports:
       - "8010:8000"
     restart: unless-stopped
+    environment:
+      DATA_ROOT: /data
+      WORKSPACE_ROOT: /workspace
+    volumes:
+      # 数据集只读挂载：宿主任意目录 → 容器内 /data（路径 jail 的边界）
+      - ${DATA_ROOT:-./data}:/data:ro
+      # 索引/资产/secrets 读写卷
+      - ${WORKSPACE_ROOT:-./workspace}:/workspace
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3); sys.exit(0 if r.status == 200 else 1)"]
       interval: 15s

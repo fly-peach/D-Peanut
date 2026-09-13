@@ -26,12 +26,13 @@
 
 ## 2. N1 数据导入层（约 1 周）—— change `data-catalog`
 
-1. `catalog/models.py` + `registry.py`：Dataset 三 kind、DatasetRef(revision)、sqlite 索引 + content_hash 自愈 + rebuild_index
+1. `catalog/models.py` + `registry.py`：Dataset 三 kind、DatasetRef(revision)、sqlite 索引 + rebuild_index（content_hash 自愈归 N2 assets）
 2. `sources/file.py`：CSV/Parquet/XLSX（pandas 读，绕 DuckDB excel 扩展——旧 M1 决策）；`sources/sql.py`：sqlite 反射起步（PG/MySQL N4 后）；secrets.json + conn_ref
 3. `scan.py`：folder glob 展开物化 child + mtime+size 树指纹 diff
 4. `profiler.py / sampler.py / reader.py`：旧 M1 设计整体搬（≤500 token/表预算、隐私清样本值、XLSX 临时视图、DuckDB 谓词下推）
 5. `api/datasets.py` 全套端点 + compose 加 DATA_ROOT/WORKSPACE_ROOT 两卷 + 路径 jail
-6. 前端数据源页：注册表单、扫描/画像状态轮询、画像/预览卡、隐私开关
+6. `settings.py` + SettingsService：settings 表 + `api/settings.py` 骨架（运行配置读写/secrets 掩码，**不含 LLM 表单**——N1/N2 零 AI 不该被迫配 key）
+7. 前端数据源页：注册表单、扫描/画像状态轮询、画像/预览卡、隐私开关
 
 **验收**：DoD #1（200 文件 <5min、增量 rescan、连接串零泄漏、隐私无原始行）。
 **冻结**：Dataset/DatasetRef/TableProfile 契约——N2/N3 只读不改。
@@ -54,10 +55,11 @@
 
 1. `agents/`：deps/prompts（七块新纪律 + processor 模板 + 动态 catalog 摘要注入）/tools 十工具/approval 装配
 2. `runs/`：/chat（toggle 409 语义）+ granular 桥 + data-asset-changed 通知帧 + FinalAnswer/cost；budget 熔断（旧 M1 设计搬）；store 补 usage/审批
-3. deferred 审批续跑：DeferredToolRequests → 前端 ConfirmDialog → /confirm 携结果 + 历史续跑
-4. 轻模式：emit_adhoc_chart（ToolReturn.metadata 内联卡）+ `POST /assets/promote` 确定性 seed + 合成消息改写环
-5. 前端：useChat 接真流（替换 M0 静态演示）、工具卡、ConfirmDialog、adhoc 卡 + promote 按钮、AI toggle 顶栏、修复横幅/成本徽章
-6. 测试：`agent.override(TestModel/FunctionModel)` 离线全环轨迹（探→试→write→validate 炸→修→save）；Spike A 帧序升格为契约测试；live 标记默认 skip
+3. 模型配置：`agents/model_factory.py`（每 Run 现造 OpenAIChatModel+OpenAIProvider，保存热生效）+ `POST /api/settings/llm/test` + Settings 页模型区（provider 预设下拉/base_url/key 掩码/[测试连接]）
+4. deferred 审批续跑：DeferredToolRequests → 前端 ConfirmDialog → /confirm 携结果 + 历史续跑
+5. 轻模式：emit_adhoc_chart（ToolReturn.metadata 内联卡）+ `POST /assets/promote` 确定性 seed + 合成消息改写环
+6. 前端：useChat 接真流（替换 M0 静态演示）、工具卡、ConfirmDialog、adhoc 卡 + promote 按钮、AI toggle 顶栏、修复横幅/成本徽章
+7. 测试：`agent.override(TestModel/FunctionModel)` 离线全环轨迹（探→试→write→validate 炸→修→save）；Spike A 帧序升格为契约测试；live 标记默认 skip
 
 **验收**：DoD #3 全部五条。
 **冻结**：十工具签名 + 事件归属表（design-architecture §3.2）。

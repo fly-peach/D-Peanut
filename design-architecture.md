@@ -49,7 +49,10 @@ data-agent/
 - 契约 = **REST（画布面+控制面）+ UIMessage Stream（AI 面）**，除此之外前后端零耦合。
 - dev：backend `uv run uvicorn data_agent.main:app --reload --port 8000`；frontend `bun run dev`（Vite :5173，/api proxy 到 8000，SSE 关缓冲）。
 - prod：`bun run build` 静态产物 → FastAPI StaticFiles 同域托管；API 独立进程。
-- 环境变量分离：后端持 LLM key / DATA_ROOT / WORKSPACE_ROOT；前端只有 VITE_API_BASE。
+- 配置分层：**引导 env**（DATA_ROOT / WORKSPACE_ROOT / 端口）→ **运行配置**存
+  `workspace/index.db` settings 表（provider/base_url/model/temperature/预算/隐私默认/
+  AI toggle 默认，可热改）→ **敏感项**（LLM key、SQL 连接串）统一 `workspace/secrets.json`
+  （0600、不入 git、API 掩码回显、日志脱敏 filter 共用一套）。前端只有 VITE_API_BASE。
 - **路径 jail**：所有注册路径 `Path.resolve().is_relative_to(DATA_ROOT)` 断言，Windows 宿主机路径 ↔ 容器路径在注册时统一 resolve。
 
 ## 2. 后端设计（uv + FastAPI + PydanticAI v3 三层）
@@ -159,7 +162,11 @@ AI 对话框面
 POST /api/sessions · GET /api/sessions · DELETE
 POST /api/sessions/{sid}/chat           # useChat 流入口（AI toggle 关闭 → 409）
 GET  /api/runs/{run_id} · POST .../confirm · POST .../cancel
-GET|PUT /api/settings · POST /api/settings/llm/test   # 含 AI toggle / DATA_ROOT / 重扫策略
+GET  /api/settings                      # 合并视图：settings 表 + secrets 掩码（key 只回后4位）
+PUT  /api/settings                      # 分写路由：敏感字段→secrets.json；缺省 key 字段=不覆盖
+POST /api/settings/llm/test             # 用当前表单值构造 model 发 max_tokens=8 最小真实请求
+                                        #   → {ok, latency_ms, model, error}（401/base_url 错原样透出）
+                                        # 保存即热生效：每次 Run 经 model_factory 现造实例，不重启
 ```
 
 ### 3.2 事件面分工（前后端契约核心）
@@ -187,9 +194,16 @@ sessions · messages · runs(status, usage, cost, resume_id, approval 记录) ·
 
 ## 4. 前端设计（bun + Vite + ai-elements + echarts）
 
-### 4.1 初始化
+### 4.1 初始化与风格基线
 
 不变（create-vite → Tailwind4+shadcn → ai-elements 装件 → `bun add @ai-sdk/react echarts @tanstack/react-table zustand`）。
+
+**风格 token 基线 = linear-app**（open-design 设计系统库，dark-first：近黑分层底、
+半透明白细描边、Inter 510、单靛紫 accent、近无彩 UI 把彩色留给图表；Radix 基座与
+shadcn 组件同源零迁移）。落地=N2 画布页首日把其 tokens.css 翻译进 index.css 的
+`--background/--foreground/--primary/--chart-1..5` 变量（亮色回退用现有 shadcn 值）；
+`--chart-1..5` 同时是 ECharts 默认 `appearance.color_palette` 来源——UI/主题/图表一套 token。
+页面布局不套任何现成模板（dashboard 类原型与三栏工作台不匹配），自绘。
 
 ### 4.2 目录与页面
 
@@ -203,7 +217,14 @@ frontend/src/
     canvas/   # CanvasGrid(placement) + ChartCard(ECharts 渲染器) + ParamForm(param_spec 驱动) + GateBanner + VersionHistory
 ```
 
-页面：工作台（左会话/数据源目录、中对话流、右画布）；数据源页（路径注册 + 卷挂载提示 + 画像/预览 + 隐私开关 + 扫描状态）；设置页（模型/**AI toggle**/执行预算/审批策略/DATA_ROOT/重扫）。echarts client-only 动态引入。
+页面（**VSCode 式布局**，隐喻：数据源=资源管理器、图表=编辑器文档、AI=Copilot Chat 面板）：
+**工作台三栏 = 左树（会话列表+数据源目录+状态徽章，可折叠）· 中画布（主工作区：图表卡网格，
+每卡 hover 工具条 重跑/参数表单/版本/promote；点卡→聚焦+右面板注入该资产上下文）·
+右 AI 面板（对话流/工具卡/adhoc 内联图/ConfirmDialog；顶栏 AI toggle、底部成本徽章；可收起，
+toggle 关闭时变灰禁输入）**；数据源独立页（路径注册+卷挂载提示+画像/预览+隐私开关+扫描状态）；
+设置页（**模型区：provider 预设下拉 OpenAI/DeepSeek/DashScope/智谱/Moonshot/Custom-兼容网关
+→ base_url/模型名/key 掩码回显/temperature/[测试连接]**、AI toggle 默认、执行预算、审批策略、
+重扫）。save_asset 成功→新卡落中栏画布。工作台顶栏绿点显示当前默认模型。echarts client-only 动态引入。
 
 ### 4.3 关键机制
 

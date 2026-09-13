@@ -101,7 +101,11 @@ data_agent = Agent(
 
 ## 5. 产品配置项（Settings 页）
 
-- 模型：provider 预设 / base_url / 模型名 / key（掩码）/ temperature / max_tokens
+- 模型（N3 随编码环交付）：provider 预设（OpenAI/DeepSeek/DashScope 兼容/智谱/Moonshot/Custom
+  OpenAI-compatible）/ base_url / 模型名 / key（secrets.json，掩码只回后 4 位，PUT 缺省=不覆盖）/
+  temperature / max_tokens；**`agents/model_factory.py` 是"模型不写死"唯一实现点**——每次 Run
+  从 SettingsService 现造 `OpenAIChatModel(model_name, provider=OpenAIProvider(base_url, api_key))`
+  注入，保存即热生效不重启；[测试连接] = 最小真实请求透出可自诊错误；v1+：多 Profile/按会话选模
 - 执行：试跑超时、重放超时、max_steps、Run 预算、闸门 payload/max_rows 上限
 - 安全：审批策略（自动放行/必须询问清单）、隐私模式默认、**SQL 连接串管理（secrets 轮换 UI）**
 - 数据：DATA_ROOT / WORKSPACE_ROOT 显示、folder 自动重扫开关（N4）
