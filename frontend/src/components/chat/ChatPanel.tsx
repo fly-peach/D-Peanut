@@ -20,6 +20,7 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from '@/components/ai-elements/reasoning'
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput, type ToolPart } from '@/components/ai-elements/tool'
 import { buildOption } from '@/lib/chartRender'
 import { diffLines } from '@/lib/diffLines'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -160,58 +161,94 @@ function ApprovalDiff({ part }: { part: Part }) {
   )
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  browse_datasource: '浏览数据源',
+  inspect_profile: '查看数据画像',
+  query_data: 'SQL 查询',
+  run_in_kernel: '内核试跑',
+  read_asset: '读取画布资产',
+  write_processor: '编写处理器',
+  validate_asset: '校验资产（闸门）',
+  patch_params: '调整参数',
+  save_asset: '保存上画布',
+  emit_adhoc_chart: '生成临时图表',
+  final_result: '最终结论',
+  list_directory: '列目录',
+  find_files: '查找文件',
+  run_command: '运行命令',
+  read_file: '读文件',
+  write_file: '写文件',
+  edit_file: '编辑文件',
+}
+
 function ToolCard({ part, onApprove }: { part: Part; onApprove: (approved: boolean, reason?: string) => void }) {
   const name = String(part.type ?? '').replace(/^tool-/, '')
   const state: string = part.state ?? ''
   const out = part.output
-  const outText = typeof out === 'string' ? out : out == null ? '' : JSON.stringify(out)
   const isRun = name === 'run_in_kernel'
-  const badge = state === 'output-error' ? 'destructive'
-    : state.startsWith('approval') ? 'outline' : 'secondary'
+  const isWriter = name === 'write_processor'
   const failed = out?.ok === false || state === 'output-error'
+  const label = TOOL_LABELS[name] ?? name
+  const defaultOpen = state === 'approval-requested' || state === 'output-error'
+
+  const summary = (() => {
+    if (state !== 'output-available' || out == null || typeof out === 'string') return ''
+    if (name === 'browse_datasource') return `${Array.isArray(out) ? out.length : 0} 个数据集`
+    if (name === 'query_data') {
+      const cols = Array.isArray(out.columns) ? out.columns.join(', ') : ''
+      return `${out.row_count ?? '?'} 行${out.truncated ? '（截断）' : ''}${cols ? ` · 列: ${cols}` : ''}`
+    }
+    if (name === 'inspect_profile') {
+      return `${out.row_count ?? '?'} 行 · ${Array.isArray(out.columns) ? out.columns.length : '?'} 列`
+    }
+    return ''
+  })()
 
   return (
-    <div className="rounded-lg border bg-card p-2">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[11px] font-medium">{name}</span>
-        <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-          badge === 'destructive' ? 'bg-destructive/15 text-destructive'
-            : badge === 'outline' ? 'border text-[10px]' : 'bg-secondary text-secondary-foreground'}`}>
-          {state.replace(/-/g, ' ')}
-        </span>
+    <Tool defaultOpen={defaultOpen} className={failed ? 'border-destructive/40' : ''}>
+      <ToolHeader title={label} type={part.type} state={state as ToolPart['state']} />
+      <ToolContent className="space-y-2 pt-0">
         {typeof part.input?.purpose === 'string' && (
-          <span className="text-muted-foreground truncate text-[10px]">{part.input.purpose}</span>
+          <p className="text-muted-foreground text-[11px]">{part.input.purpose}</p>
         )}
-      </div>
-      {part.input && (isRun || name === 'write_processor') && (
-        <pre className="bg-muted/60 mt-1.5 max-h-40 overflow-auto rounded p-1.5 font-mono text-[10px] leading-tight">
-          {String(part.input.code ?? part.input.source ?? '').slice(0, 2000)}
-        </pre>
-      )}
-      {state === 'approval-requested' && (
-        <div className="mt-2 space-y-1.5 rounded-md border border-primary/40 bg-primary/10 p-2">
-          <p className="text-xs font-medium">需要你的批准：{name}</p>
-          {part.approval?.requestReason && (
-            <p className="text-muted-foreground text-[11px]">{part.approval.requestReason}</p>
-          )}
-          <ApprovalDiff part={part} />
-          <div className="flex justify-end gap-2">
-            <Button size="xs" variant="outline" onClick={() => onApprove(false, '用户拒绝')}><X className="size-3" />拒绝</Button>
-            <Button size="xs" onClick={() => onApprove(true)}><Check className="size-3" />批准</Button>
-          </div>
-        </div>
-      )}
-      {(state === 'output-available' || state === 'output-error') && out != null && (
-        !isRun ? (
-          <p className="text-muted-foreground mt-1 font-mono text-[10px]">{outText.slice(0, 300)}</p>
-        ) : (
-          <pre className={`mt-1.5 max-h-44 overflow-auto rounded p-1.5 font-mono text-[10px] leading-tight ${
-            failed ? 'bg-destructive/10 text-destructive' : 'bg-muted/60'}`}>
-            {String(out.stdout ?? out.error ?? outText).slice(0, 1500)}
+        {part.input && (isRun || isWriter) && (
+          <pre className="bg-muted/60 max-h-40 overflow-auto rounded p-1.5 font-mono text-[10px] leading-tight">
+            {String(part.input.code ?? part.input.source ?? '').slice(0, 2000)}
           </pre>
-        )
-      )}
-    </div>
+        )}
+        {part.input && !isRun && !isWriter && (
+          <ToolInput input={part.input} className="[&>div]:max-h-44 [&>div]:overflow-auto" />
+        )}
+        {state === 'approval-requested' && (
+          <div className="space-y-1.5 rounded-md border border-primary/40 bg-primary/10 p-2">
+            <p className="text-xs font-medium">需要你的批准：{label}</p>
+            {part.approval?.requestReason && (
+              <p className="text-muted-foreground text-[11px]">{part.approval.requestReason}</p>
+            )}
+            <ApprovalDiff part={part} />
+            <div className="flex justify-end gap-2">
+              <Button size="xs" variant="outline" onClick={() => onApprove(false, '用户拒绝')}><X className="size-3" />拒绝</Button>
+              <Button size="xs" onClick={() => onApprove(true)}><Check className="size-3" />批准</Button>
+            </div>
+          </div>
+        )}
+        {state === 'output-available' && summary && (
+          <p className="text-muted-foreground text-[11px]">{summary}</p>
+        )}
+        {state === 'output-available' && isRun && out != null && (
+          <pre className={`max-h-44 overflow-auto rounded p-1.5 font-mono text-[10px] leading-tight ${
+            failed ? 'bg-destructive/10 text-destructive' : 'bg-muted/60'}`}>
+            {String(out.stdout ?? out.error ?? '').slice(0, 1500)}
+          </pre>
+        )}
+        {state === 'output-error' && (
+          <ToolOutput output={undefined} errorText={String(part.errorText ?? '')} />
+        )}
+        {state === 'output-available' && !isRun && out != null && typeof out === 'object' && (
+          <ToolOutput output={out} errorText={undefined} className="max-h-56 overflow-auto" />
+        )}
+      </ToolContent>
+    </Tool>
   )
 }
 
