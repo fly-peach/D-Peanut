@@ -9,6 +9,9 @@
 write_processor / validate_asset / patch_params / save_asset / emit_adhoc_chart；
 write_processor 与 save_asset 需人工审批，save_asset 强制 status=validated，
 reflect（执行失败重试）≤3、max_steps=12、token/费用预算熔断。
+工具环运行于官方 pydantic-ai-harness 能力栈包络之下（n5 起为正式配置）：FileSystem
+（DATA_ROOT 只读）、Shell（白名单 ls/du/wc/find，拒绝密钥环境变量）、Planning、
+WarnNearLimits（200k token / 12 迭代预警）、ToolOutputLimits；十工具签名不受影响。
 
 #### Scenario: 错列名自动修复
 
@@ -43,6 +46,7 @@ DeferredToolRequests 结束并发出 tool-approval-request 帧；用户决议经
 AI 面事件 SHALL 按归属表输出：text-* / tool-input-* / tool-output-available(ExecResult
 摘要+全量入 Run 表) / tool-approval-request / data-asset-changed(仅通知不含数据本体) /
 adhoc 图经 ToolReturn.metadata / data-final / data-run+finish；画布数据本体只走 REST。
+官方 adapter 的 reasoning 帧原样透传至前端 Reasoning 组件，恢复副本吸收 reasoning-delta。
 断线续传=第二次 /chat 携历史；AI toggle 关闭时 /chat 返回 409。
 
 #### Scenario: 通知帧不携数据
@@ -66,10 +70,35 @@ adhoc 图经 ToolReturn.metadata / data-final / data-run+finish；画布数据�
 ### Requirement: 模型配置热生效
 
 Settings SHALL 管理 provider 预设/base_url/模型名/temperature（敏感 key 存 secrets
-掩码回显），model_factory 每 Run 现构模型实例；POST /api/settings/llm/test 发最小
-真实请求并透出可自诊错误；AI toggle 持久于 settings。
+掩码回显），model_factory 每 Run 现构模型实例；模型可声明 supports_forced_tool_choice=false
+（thinking 类），此时经 OpenAI profile 注入 openai_supports_tool_choice_required=false，
+强制工具选择降级为 auto；POST /api/settings/llm/test 发最小真实请求并透出可自诊错误；
+AI toggle 持久于 settings。
 
 #### Scenario: 无密钥测试连接
 
 - **WHEN** 未配置 key 点击测试连接
 - **THEN** 返回 {ok:false, error 含缺 key/网络原因}，不抛 5xx
+
+#### Scenario: thinking 模型降级工具选择
+
+- **WHEN** 模型配置 supports_forced_tool_choice=false 构建 OpenAIChatModel
+- **THEN** 注入 openai_supports_tool_choice_required=false 的 profile，工具选择以 auto 下发
+  而非 required
+
+### Requirement: 会话生命周期管理
+
+系统 SHALL 提供会话管理端点：POST /api/sessions 创建、GET /api/sessions 列出、
+PATCH /api/sessions/{sid} 改名（非空、≤80 字符，空标题 422）、DELETE /api/sessions/{sid}
+删除并回收该会话常驻内核；未命名会话收到首条用户消息时 SHALL 以其内容自动命名
+（≤60 字符，且不覆盖已有标题）。
+
+#### Scenario: 首条消息自动命名
+
+- **WHEN** 无标题会话发出第一条用户消息
+- **THEN** 会话标题自动取自该消息（截断 ≤60 字符），后续人工改名不被覆盖
+
+#### Scenario: 删除即回收内核
+
+- **WHEN** DELETE /api/sessions/{sid} 成功返回
+- **THEN** 该会话的 ipykernel 子进程被 shutdown，内核池中不再存在该会话

@@ -14,8 +14,8 @@
 
 ### Requirement: 断线双通道恢复
 
-对话面 SHALL 服务端持久化消息副本（UIMessage 形态端点），刷新/断线后前端可整段重建；
-画布面冷加载幂等。两通道互不依赖。
+对话面 SHALL 服务端持久化消息副本（UIMessage 形态端点，含吸收 reasoning-delta 后的
+reasoning 段），刷新/断线后前端可整段重建；画布面冷加载幂等。两通道互不依赖。
 
 #### Scenario: 刷新恢复
 
