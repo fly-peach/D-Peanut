@@ -128,7 +128,10 @@ def query_data(ctx: RunContext[AgentDeps], dataset: str, sql: str,
         tbl = re.sub(r"\W", "_", tbl) or "t"
         if ds.kind == "file" and ds.meta.format in ("csv", "parquet"):
             fn = "read_csv" if ds.meta.format == "csv" else "read_parquet"
-            con.execute(f'CREATE TEMP VIEW "{tbl}" AS SELECT * FROM {fn}(?)', [ds.meta.path])
+            # DuckDB 拒绝在 CREATE VIEW 里用预处理参数（can't be prepared），
+            # 只能内插路径；单引号翻倍防注入（路径来自服务端注册，非用户输入）
+            path_sql = str(ds.meta.path).replace("'", "''")
+            con.execute(f'CREATE TEMP VIEW "{tbl}" AS SELECT * FROM {fn}(\'{path_sql}\')')
         else:
             kwargs = {"conn_target": deps.canvas_replay.secrets.get(ds.meta.conn_ref)} \
                 if ds.kind == "sql" else {}
