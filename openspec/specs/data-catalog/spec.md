@@ -21,8 +21,8 @@ Dataset）、sqlite 库（表/列反射）统一注册为 Dataset；`DatasetRef{
 
 ### Requirement: 增量扫描与 revision 指纹
 
-folder rescan SHALL 基于 mtime+size 树指纹做 diff：仅变更文件 bump revision 并将画像标
-outdated、新增建子 Dataset、删除标 failed；symlink 不参与扫描。
+folder rescan SHALL 基于 mtime+size 树指纹做 diff：仅变更文件 bump revision 并触发画像重算
+（重算完成前状态 profiling）、新增建子 Dataset、删除标 failed；symlink 不参与扫描。
 
 #### Scenario: 只动变更项
 
@@ -56,8 +56,8 @@ SQL 连接串仅存 workspace/secrets.json（0600），索引/API 响应/日志/
 
 ### Requirement: 统一读取接口
 
-系统 SHALL 提供 `read_dataset(ref, columns?, limit?) -> DataFrame` 唯一读取路径
-（CSV/Parquet 经 DuckDB、XLSX 经 pandas 注册临时视图），供画像、preview 与后续的
+系统 SHALL 提供 `read_dataset(ds, columns?, limit?)` 唯一读取路径（SQL 源由调用方解析
+conn_target；CSV/Parquet 经 DuckDB、XLSX 经 pandas 直读），供画像、preview 与后续的
 AI 查询、资产绑定复用，不允许旁路读法。
 
 #### Scenario: 限行读取
@@ -68,7 +68,7 @@ AI 查询、资产绑定复用，不允许旁路读法。
 ### Requirement: 前端数据源管理可见
 
 前端 SHALL 提供数据源页：三源注册表单（含 sheet 选择与 glob 输入）、扫描/画像状态轮询展示、
-画像卡与 preview 表、隐私开关、重命名与删除。
+画像卡与 preview 表、隐私开关与删除。
 
 #### Scenario: 注册到就绪闭环
 

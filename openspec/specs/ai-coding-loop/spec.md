@@ -11,7 +11,9 @@ write_processor 与 save_asset 需人工审批，save_asset 强制 status=valida
 reflect（执行失败重试）≤3、max_steps=12、token/费用预算熔断。
 工具环运行于官方 pydantic-ai-harness 能力栈包络之下（n5 起为正式配置）：FileSystem
 （DATA_ROOT 只读）、Shell（白名单 ls/du/wc/find，拒绝密钥环境变量）、Planning、
-WarnNearLimits（200k token / 12 迭代预警）、ToolOutputLimits；十工具签名不受影响。
+WarnNearLimits（200k token / 12 迭代预警）、ToolOutputLimits；ClearToolResults 与 SubAgents
+刻意省略（ProcessHistory 独占折叠；SubAgents 绑死模型会破坏每 Run 注入不变量）；
+query_data 对无界查询自动追加 LIMIT ≤1000；十工具签名不受影响。
 
 #### Scenario: 错列名自动修复
 
@@ -43,9 +45,10 @@ DeferredToolRequests 结束并发出 tool-approval-request 帧；用户决议经
 
 ### Requirement: UIMessage 事件归属表（冻结）
 
-AI 面事件 SHALL 按归属表输出：text-* / tool-input-* / tool-output-available(ExecResult
-摘要+全量入 Run 表) / tool-approval-request / data-asset-changed(仅通知不含数据本体) /
-adhoc 图经 ToolReturn.metadata / data-final / data-run+finish；画布数据本体只走 REST。
+AI 面事件 SHALL 按归属表输出：text-* / tool-input-* / tool-output-available(ExecResult 摘要
+入流与 run_steps.output_digest) / tool-approval-request / data-asset-changed(仅通知不含数据本体) /
+adhoc 图经 ToolReturn.metadata / 最终结论经 final_result 工具件（FinalAnswer 结构化输出）/
+data-run+finish；画布数据本体只走 REST。
 官方 adapter 的 reasoning 帧原样透传至前端 Reasoning 组件，恢复副本吸收 reasoning-delta。
 断线续传=第二次 /chat 携历史；AI toggle 关闭时 /chat 返回 409。
 
@@ -70,8 +73,8 @@ adhoc 图经 ToolReturn.metadata / data-final / data-run+finish；画布数据�
 ### Requirement: 模型配置热生效
 
 Settings SHALL 管理 provider 预设/base_url/模型名/temperature（敏感 key 存 secrets
-掩码回显），model_factory 每 Run 现构模型实例；模型可声明 supports_forced_tool_choice=false
-（thinking 类），此时经 OpenAI profile 注入 openai_supports_tool_choice_required=false，
+掩码回显），model_factory 每 Run 现构模型实例；模型可声明 supports_forced_tool_choice=false（settings 键 llm_supports_forced_tool_choice，
+thinking 类），此时经 OpenAI profile 注入 openai_supports_tool_choice_required=false，
 强制工具选择降级为 auto；POST /api/settings/llm/test 发最小真实请求并透出可自诊错误；
 AI toggle 持久于 settings。
 

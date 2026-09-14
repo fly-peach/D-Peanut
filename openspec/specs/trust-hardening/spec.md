@@ -26,7 +26,7 @@ reasoning 段），刷新/断线后前端可整段重建；画布面冷加载幂
 ### Requirement: 审批信息升级
 
 写资产审批面板 SHALL 展示行级源码 diff（相对当前版本）与 verifier 风险原因；
-上画布审批展示 params 与最近闸门结果。
+save_asset 上画布审批展示资产 ID 与画布位置参数。
 
 #### Scenario: 改版可见
 
@@ -46,8 +46,8 @@ reasoning 段），刷新/断线后前端可整段重建；画布面冷加载幂
 ### Requirement: 审计与导出
 
 每个资产 SHALL 提供全生命周期审计视图（版本快照 + 每次重放的触发者/结果/耗时/错误），
-run 提供步骤与用量明细；图表卡可导出 PNG，渲染数据可导出 CSV；全链路日志经统一
-脱敏 filter（密钥零明文）。
+run 提供步骤与用量明细并支持 POST /runs/{id}/cancel 中断（内核 best-effort interrupt）；
+图表卡可导出 PNG，渲染数据可导出 CSV；全链路日志经统一脱敏 filter（密钥零明文）。
 
 #### Scenario: 追责链
 
