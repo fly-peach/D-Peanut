@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -26,6 +27,8 @@ from ..settings import SettingsService
 from .state import RunStatus
 from .store import RunStore
 
+logger = logging.getLogger(__name__)
+
 
 def settings_to_run_settings(svc: SettingsService) -> RunSettings:
     s = svc.get_view()["settings"]
@@ -40,6 +43,7 @@ def settings_to_run_settings(svc: SettingsService) -> RunSettings:
         budget_tokens=int(s.get("budget_tokens", 200_000)),
         budget_usd=float(s.get("budget_usd", 2.0)),
         privacy_default=bool(s.get("privacy_mode_default", False)),
+        supports_forced_tool_choice=bool(s.get("llm_supports_forced_tool_choice", True)),
         language=str(s.get("language", "zh")),
         timezone=str(s.get("timezone", "Asia/Shanghai")),
     )
@@ -130,6 +134,12 @@ class ChatRunner:
                     collected[-1]["text"] += data.get("delta", "")
                 else:
                     collected.append({"type": "text", "text": data.get("delta", "")})
+            elif t == "reasoning-delta":
+                # thinking models (deepseek-flash etc.): keep 思考内容 in restore copies
+                if collected and collected[-1]["type"] == "reasoning":
+                    collected[-1]["text"] += data.get("delta", "")
+                else:
+                    collected.append({"type": "reasoning", "text": data.get("delta", "")})
             elif t == "tool-input-available":
                 collected.append({"type": f"tool-{data.get('toolName', '?')}",
                                   "toolCallId": data.get("toolCallId"),
@@ -187,6 +197,7 @@ class ChatRunner:
                             yield note
                     yield chunk
             except Exception as e:  # noqa: BLE001 — stream must end in-band, not as a 500
+                logger.exception("chat run %s failed mid-stream", run.run_id)
                 status = "failed"
                 for note in _drain_assets(state, "failed"):
                     yield note

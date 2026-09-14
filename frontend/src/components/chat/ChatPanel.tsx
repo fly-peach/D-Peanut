@@ -15,6 +15,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Streamdown } from 'streamdown'
 
 import { Button } from '@/components/ui/button'
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from '@/components/ai-elements/reasoning'
 import { buildOption } from '@/lib/chartRender'
 import { diffLines } from '@/lib/diffLines'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -312,12 +317,14 @@ function ChatInner({ sid, initial }: { sid: string; initial: UIMessage[] }) {
                       </div>
                     ) : null
                   }
-                  if (p.type === 'reasoning') return (
-                    <details key={i} className="text-muted-foreground text-[11px]">
-                      <summary className="cursor-pointer">思考</summary>
-                      <p className="pl-3">{String(p.text ?? '')}</p>
-                    </details>
-                  )
+                  if (p.type === 'reasoning') {
+                    return (
+                      <Reasoning key={i} isStreaming={p.state === 'streaming'}>
+                        <ReasoningTrigger />
+                        <ReasoningContent>{String(p.text ?? '')}</ReasoningContent>
+                      </Reasoning>
+                    )
+                  }
                   if (String(p.type).startsWith('data-')) {
                     return p.type === 'data-run' ? (
                       <p key={i} className="text-muted-foreground font-mono text-[10px]">
