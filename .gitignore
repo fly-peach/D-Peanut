@@ -27,3 +27,8 @@ dist/
 
 # 临时浏览器截图（调试）
 .shots/
+
+# some other tools
+.agents/
+.claude/
+skills-lock.json
