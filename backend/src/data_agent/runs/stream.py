@@ -114,6 +114,8 @@ class ChatRunner:
         run_input = VercelAIAdapter.build_run_input(body)
         adapter = VercelAIAdapter(get_agent(), run_input)
         run = self.store.create_run(session_id, _last_user_text(body))
+        if run.message:
+            self.store.auto_title(session_id, run.message)  # Codex-style first-message title
         deps, state = self.build_deps(session_id, run)
         try:
             model = build_model(deps.settings, self.settings.secrets.get("llm.api_key"))

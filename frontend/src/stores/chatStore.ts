@@ -13,6 +13,7 @@ interface ChatState {
   loaded: boolean
   loadSessions: () => Promise<void>
   newSession: () => Promise<string>
+  rename: (sid: string, title: string) => Promise<void>
   select: (sid: string | null) => void
   remove: (sid: string) => Promise<void>
   loadAiToggle: () => Promise<void>
@@ -50,6 +51,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   select: (sid) => set({ activeSid: sid }),
+
+  rename: async (sid, title) => {
+    await http(`/sessions/${sid}`, { method: 'PATCH', body: JSON.stringify({ title }) })
+    set((s) => ({ sessions: s.sessions.map((x) => (x.id === sid ? { ...x, title } : x)) }))
+  },
 
   remove: async (sid) => {
     await http(`/sessions/${sid}`, { method: 'DELETE' })

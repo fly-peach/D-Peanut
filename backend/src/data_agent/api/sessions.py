@@ -17,6 +17,10 @@ class SessionCreate(BaseModel):
     title: str = ""
 
 
+class SessionRename(BaseModel):
+    title: str
+
+
 @router.post("", status_code=201)
 def create_session(body: SessionCreate, request: Request) -> dict[str, str]:
     sid = request.app.state.store.create_session(body.title)
@@ -31,6 +35,19 @@ def list_sessions(request: Request, limit: int = 50) -> list[dict]:
 @router.delete("/{sid}", status_code=204)
 def delete_session(sid: str, request: Request) -> None:
     request.app.state.store.delete_session(sid)
+    try:  # session kernel is disposable at teardown
+        request.app.state.session_kernels.shutdown(sid)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@router.patch("/{sid}")
+def rename_session(sid: str, body: SessionRename, request: Request) -> dict[str, str]:
+    title = body.title.strip()[:80]
+    if not title:
+        raise HTTPException(422, "title 不能为空")
+    request.app.state.store.rename_session(sid, title)
+    return {"id": sid, "title": title}
 
 
 @router.get("/{sid}/messages")

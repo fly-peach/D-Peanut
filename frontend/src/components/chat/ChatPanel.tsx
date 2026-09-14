@@ -293,6 +293,10 @@ function ChatInner({ sid, initial }: { sid: string; initial: UIMessage[] }) {
       const tools = (last.parts as Part[]).filter((p) => String(p.type).startsWith('tool-'))
       return tools.length > 0 && tools.every((p) => p.state === 'approval-responded')
     },
+    onFinish: () => {
+      // auto-title / updated_at changes server-side: refresh the sidebar list
+      void useChatStore.getState().loadSessions()
+    },
   } as never)
 
   // data-asset-changed -> refresh canvas (dedupe by asset+version)

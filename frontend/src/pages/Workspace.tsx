@@ -2,8 +2,8 @@
  * work area) · right AI panel placeholder (goes live in N3). */
 
 import {
-  Database, Folder, FileText, PanelLeftClose, PanelLeftOpen,
-  PanelRightClose, PanelRightOpen, Sparkles,
+  Database, Folder, FileText, Pencil, PanelLeftClose, PanelLeftOpen,
+  PanelRightClose, PanelRightOpen, Plus, Search, Sparkles, Trash2,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -12,7 +12,7 @@ import { ChartCard } from '@/components/canvas/ChartCard'
 import { Button } from '@/components/ui/button'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCatalogStore } from '@/stores/catalogStore'
-import { useChatStore } from '@/stores/chatStore'
+import { useChatStore, type SessionInfo } from '@/stores/chatStore'
 import { stopCatalogPolling } from '@/stores/catalogStore'
 import { BAR_TOPN_SOURCE } from '@/lib/seedProcessors'
 
@@ -48,6 +48,111 @@ function useSidebarState() {
 const AI_MIN = 300
 const AI_MAX = 560
 const AI_DEFAULT = 384
+
+function SessionList() {
+  const sessions = useChatStore((s) => s.sessions)
+  const activeSid = useChatStore((s) => s.activeSid)
+  const select = useChatStore((s) => s.select)
+  const newSession = useChatStore((s) => s.newSession)
+  const remove = useChatStore((s) => s.remove)
+  const rename = useChatStore((s) => s.rename)
+  const [query, setQuery] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const filtered = sessions.filter((s) => {
+    const q = query.trim().toLowerCase()
+    if (!q) return true
+    return (s.title || s.id).toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
+  })
+
+  const saveEdit = async (sid: string) => {
+    const t = draft.trim()
+    if (t) await rename(sid, t).catch(() => undefined)
+    setEditing(null)
+  }
+  const del = async (sid: string) => {
+    if (!window.confirm('删除该会话及其全部消息？')) return
+    await remove(sid).catch(() => undefined)
+  }
+
+  return (
+    <div className="border-b px-2 pb-2">
+      <div className="flex items-center gap-1 pb-1">
+        <Button size="xs" className="min-w-0 flex-1" onClick={() => void newSession()}>
+          <Plus className="size-3" /> 新会话
+        </Button>
+      </div>
+      <div className="relative">
+        <Search className="text-muted-foreground pointer-events-none absolute left-1.5 top-1/2 size-3 -translate-y-1/2" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜索会话"
+          className="bg-muted/60 focus:ring-primary/50 w-full rounded py-1 pl-6 pr-1 text-[11px] outline-none placeholder:text-muted-foreground/70 focus:ring-1"
+        />
+      </div>
+      <div className="max-h-56 space-y-0.5 overflow-y-auto pt-1">
+        {filtered.map((s) => (
+          <SessionRow key={s.id} s={s} active={s.id === activeSid} editing={editing === s.id}
+            draft={draft} setDraft={setDraft} onEdit={() => { setEditing(s.id); setDraft(s.title || s.id.slice(3, 9)) }}
+            onCancelEdit={() => setEditing(null)} onSaveEdit={() => void saveEdit(s.id)}
+            onSelect={() => select(s.id)} onDelete={() => void del(s.id)} />
+        ))}
+        {filtered.length === 0 && (
+          <p className="px-1 py-2 text-[11px] text-muted-foreground">{query ? '无匹配会话' : '还没有会话'}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SessionRow({ s, active, editing, draft, setDraft, onEdit, onCancelEdit, onSaveEdit, onSelect, onDelete }: {
+  s: SessionInfo
+  active: boolean
+  editing: boolean
+  draft: string
+  setDraft: (v: string) => void
+  onEdit: () => void
+  onCancelEdit: () => void
+  onSaveEdit: () => void
+  onSelect: () => void
+  onDelete: () => void
+}) {
+  const title = s.title || s.id.slice(3, 9)
+  return (
+    <div className={`group flex items-center gap-1 rounded px-1.5 py-1 text-[11px] ${
+      active ? 'bg-primary/15 text-primary' : 'text-foreground/80 hover:bg-accent'}`}>
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSaveEdit()
+            if (e.key === 'Escape') onCancelEdit()
+          }}
+          onBlur={onSaveEdit}
+          className="border-primary/50 bg-background min-w-0 flex-1 rounded border px-1 py-0.5 outline-none"
+        />
+      ) : (
+        <button className="min-w-0 flex-1 truncate text-left" onClick={onSelect} title={s.id}>
+          {title}
+        </button>
+      )}
+      <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+        <button onClick={onEdit} title="重命名"
+                className="rounded p-0.5 transition-colors hover:bg-accent hover:text-foreground">
+          <Pencil className="size-3" />
+        </button>
+        <button onClick={onDelete} title="删除会话"
+                className="rounded p-0.5 transition-colors hover:bg-destructive/20 hover:text-destructive">
+          <Trash2 className="size-3" />
+        </button>
+      </span>
+    </div>
+  )
+}
 
 function LeftTree({ width, onResize, onCollapse }: {
   width: number
@@ -85,8 +190,9 @@ function LeftTree({ width, onResize, onCollapse }: {
     return { parents, childrenOf }
   }, [briefs])
   return (
-    <aside style={{ width }} className="relative flex shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar px-2 py-3">
-      <p className="text-muted-foreground flex items-center gap-1 px-1 pb-1 text-[11px] font-medium">
+    <aside style={{ width }} className="relative flex shrink-0 flex-col overflow-y-auto border-r bg-sidebar px-2 py-3">
+      <SessionList />
+      <p className="text-muted-foreground flex items-center gap-1 px-1 pb-1 pt-2 text-[11px] font-medium">
         <Database className="size-3" /> 数据源（{briefs.length}）
         <button onClick={onCollapse} title="折叠侧边栏"
                 className="ml-auto rounded p-0.5 hover:bg-accent hover:text-foreground">
@@ -204,15 +310,8 @@ function RightAiPanel({ width, onResize, onCollapse }: {
   onCollapse: () => void
 }) {
   const aiEnabled = useChatStore((s) => s.aiEnabled)
-  const sessions = useChatStore((s) => s.sessions)
   const activeSid = useChatStore((s) => s.activeSid)
-  const select = useChatStore((s) => s.select)
-  const newSession = useChatStore((s) => s.newSession)
-  const loadSessions = useChatStore((s) => s.loadSessions)
   const drag = useRef<{ startX: number; startW: number } | null>(null)
-  useEffect(() => {
-    void loadSessions()
-  }, [loadSessions])
   const onDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
     drag.current = { startX: e.clientX, startW: width }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -243,26 +342,14 @@ function RightAiPanel({ width, onResize, onCollapse }: {
         {aiEnabled
           ? <span className="bg-primary/10 text-primary ml-auto rounded-full px-2 py-0.5 text-[10px]">ON</span>
           : <span className="bg-secondary text-muted-foreground ml-auto rounded-full px-2 py-0.5 text-[10px]">OFF</span>}
-        <Button size="xs" variant="outline" onClick={() => void newSession()}>新会话</Button>
         <button onClick={onCollapse} title="Collapse AI panel"
                 className="text-muted-foreground rounded p-0.5 transition-colors hover:bg-accent hover:text-foreground">
           <PanelRightClose className="size-3.5" />
         </button>
       </div>
-      {sessions.length > 1 && (
-        <div className="flex gap-1 overflow-x-auto border-b px-2 py-1">
-          {sessions.slice(0, 8).map((s) => (
-            <button key={s.id} onClick={() => select(s.id)}
-                    className={`shrink-0 rounded px-2 py-0.5 text-[10px] ${
-                      s.id === activeSid ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent'}`}>
-              {s.title || s.id.slice(3, 9)}
-            </button>
-          ))}
-        </div>
-      )}
       <div className="min-h-0 flex-1">
         {activeSid ? <ChatPanel /> : (
-          <p className="text-muted-foreground p-4 text-center text-xs">点「新会话」开始与 AI 协作</p>
+          <p className="text-muted-foreground p-4 text-center text-xs">点左侧「新会话」开始与 AI 协作</p>
         )}
       </div>
     </aside>

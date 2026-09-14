@@ -101,6 +101,18 @@ class RunStore:
         self.conn.execute("UPDATE sessions SET updated_at=? WHERE id=?", (_now(), sid))
         self.conn.commit()
 
+    def rename_session(self, sid: str, title: str) -> None:
+        self.conn.execute(
+            "UPDATE sessions SET title=?, updated_at=? WHERE id=?", (title, _now(), sid)
+        )
+        self.conn.commit()
+
+    def auto_title(self, sid: str, title: str) -> None:
+        """Codex-style: first user message names the session (only if untitled)."""
+        row = self.conn.execute("SELECT title FROM sessions WHERE id=?", (sid,)).fetchone()
+        if row and not (row[0] or "").strip() and title.strip():
+            self.rename_session(sid, title.strip()[:60])
+
     def ensure_session(self, sid: str) -> str:
         row = self.conn.execute("SELECT id FROM sessions WHERE id=?", (sid,)).fetchone()
         if row is None:
