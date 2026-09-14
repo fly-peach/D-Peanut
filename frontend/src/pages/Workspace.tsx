@@ -1,7 +1,10 @@
 /** VSCode-style Workspace: left tree (sessions/datasets) · center canvas (main
  * work area) · right AI panel placeholder (goes live in N3). */
 
-import { Database, Folder, FileText, PanelLeftClose, PanelLeftOpen, Sparkles } from 'lucide-react'
+import {
+  Database, Folder, FileText, PanelLeftClose, PanelLeftOpen,
+  PanelRightClose, PanelRightOpen, Sparkles,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ChatPanel } from '@/components/chat/ChatPanel'
@@ -13,24 +16,38 @@ import { useChatStore } from '@/stores/chatStore'
 import { stopCatalogPolling } from '@/stores/catalogStore'
 import { BAR_TOPN_SOURCE } from '@/lib/seedProcessors'
 
-/* ---- sidebar width/collapse（持久化，带上下限）---- */
+/* ---- 可调面板通用：持久化宽度（钳制）+ 折叠标记 ---- */
+function useClampedPersist(key: string, def: number, min: number, max: number) {
+  const [v, setV] = useState(() => {
+    const n = Number(localStorage.getItem(key))
+    return Number.isFinite(n) && n > 0 ? Math.min(max, Math.max(min, Math.round(n))) : def
+  })
+  useEffect(() => { localStorage.setItem(key, String(v)) }, [key, v])
+  const set = (n: number) => setV(Math.min(max, Math.max(min, Math.round(n))))
+  return [v, set] as const
+}
+
+function usePersistedFlag(key: string, def: boolean) {
+  const [v, setV] = useState(() => (localStorage.getItem(key) ?? (def ? '1' : '0')) === '1')
+  useEffect(() => { localStorage.setItem(key, v ? '1' : '0') }, [key, v])
+  return [v, setV] as const
+}
+
+/* ---- 左侧栏（持久化，带上下限）---- */
 const SB_MIN = 180
 const SB_MAX = 420
 const SB_DEFAULT = 240
-const clampW = (w: number) => Math.min(SB_MAX, Math.max(SB_MIN, Math.round(w)))
 
 function useSidebarState() {
-  const [width, setWidthState] = useState(() => {
-    const n = Number(localStorage.getItem('data-agent.sidebar.width'))
-    return Number.isFinite(n) && n > 0 ? clampW(n) : SB_DEFAULT
-  })
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem('data-agent.sidebar.collapsed') === '1')
-  useEffect(() => { localStorage.setItem('data-agent.sidebar.width', String(width)) }, [width])
-  useEffect(() => { localStorage.setItem('data-agent.sidebar.collapsed', collapsed ? '1' : '0') }, [collapsed])
-  const setWidth = (w: number) => setWidthState(clampW(w))
+  const [width, setWidth] = useClampedPersist('data-agent.sidebar.width', SB_DEFAULT, SB_MIN, SB_MAX)
+  const [collapsed, setCollapsed] = usePersistedFlag('data-agent.sidebar.collapsed', false)
   return { width, setWidth, collapsed, setCollapsed }
 }
+
+/* ---- 右侧 AI 面板（同款，把手在左缘，向左拖变宽）---- */
+const AI_MIN = 300
+const AI_MAX = 560
+const AI_DEFAULT = 384
 
 function LeftTree({ width, onResize, onCollapse }: {
   width: number
@@ -108,9 +125,11 @@ function LeftTree({ width, onResize, onCollapse }: {
   )
 }
 
-function CanvasArea({ showSidebarToggle, onToggleSidebar }: {
+function CanvasArea({ showSidebarToggle, onToggleSidebar, showAiToggle, onToggleAi }: {
   showSidebarToggle: boolean
   onToggleSidebar: () => void
+  showAiToggle: boolean
+  onToggleAi: () => void
 }) {
   const assets = useCanvasStore((s) => s.assets)
   const renders = useCanvasStore((s) => s.renders)
@@ -148,6 +167,12 @@ function CanvasArea({ showSidebarToggle, onToggleSidebar }: {
         <h2 className="text-sm font-medium">画布</h2>
         <span className="text-muted-foreground text-xs">{assets.length} 张卡</span>
         <div className="ml-auto flex gap-2">
+          {showAiToggle && (
+            <button onClick={onToggleAi} title="Expand AI panel"
+                    className="text-muted-foreground rounded p-1 transition-colors hover:bg-accent hover:text-foreground">
+              <PanelRightOpen className="size-4" />
+            </button>
+          )}
           <Button size="xs" variant="outline" onClick={() => loadAll()}>刷新</Button>
           <Button size="xs" onClick={() => void createDemo()}>创建示例卡（seed processor）</Button>
         </div>
@@ -173,19 +198,45 @@ function CanvasArea({ showSidebarToggle, onToggleSidebar }: {
   )
 }
 
-function RightAiPanel() {
+function RightAiPanel({ width, onResize, onCollapse }: {
+  width: number
+  onResize: (w: number) => void
+  onCollapse: () => void
+}) {
   const aiEnabled = useChatStore((s) => s.aiEnabled)
   const sessions = useChatStore((s) => s.sessions)
   const activeSid = useChatStore((s) => s.activeSid)
   const select = useChatStore((s) => s.select)
   const newSession = useChatStore((s) => s.newSession)
   const loadSessions = useChatStore((s) => s.loadSessions)
+  const drag = useRef<{ startX: number; startW: number } | null>(null)
   useEffect(() => {
     void loadSessions()
   }, [loadSessions])
+  const onDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = { startX: e.clientX, startW: width }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    e.preventDefault()
+  }
+  const onDragMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return
+    onResize(drag.current.startW - (e.clientX - drag.current.startX))
+  }
+  const onDragEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = null
+    e.currentTarget.releasePointerCapture(e.pointerId)
+  }
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l bg-sidebar">
+    <aside style={{ width }} className="relative flex shrink-0 flex-col border-l bg-sidebar">
+      {/* 左缘拖拽把手：向左拖变宽，双击复位 */}
+      <div
+        role="separator" aria-orientation="vertical"
+        onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd}
+        onDoubleClick={() => onResize(AI_DEFAULT)}
+        title="Drag to resize - double-click to reset (300-560px)"
+        className="absolute inset-y-0 left-0 z-10 w-[5px] cursor-col-resize select-none transition-colors hover:bg-primary/40"
+      />
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Sparkles className="size-4 text-primary" />
         <span className="text-sm font-medium">AI 编码面板</span>
@@ -193,6 +244,10 @@ function RightAiPanel() {
           ? <span className="bg-primary/10 text-primary ml-auto rounded-full px-2 py-0.5 text-[10px]">ON</span>
           : <span className="bg-secondary text-muted-foreground ml-auto rounded-full px-2 py-0.5 text-[10px]">OFF</span>}
         <Button size="xs" variant="outline" onClick={() => void newSession()}>新会话</Button>
+        <button onClick={onCollapse} title="Collapse AI panel"
+                className="text-muted-foreground rounded p-0.5 transition-colors hover:bg-accent hover:text-foreground">
+          <PanelRightClose className="size-3.5" />
+        </button>
       </div>
       {sessions.length > 1 && (
         <div className="flex gap-1 overflow-x-auto border-b px-2 py-1">
@@ -216,6 +271,8 @@ function RightAiPanel() {
 
 export default function Workspace() {
   const sidebar = useSidebarState()
+  const [aiWidth, setAiWidth] = useClampedPersist('data-agent.aipanel.width', AI_DEFAULT, AI_MIN, AI_MAX)
+  const [aiCollapsed, setAiCollapsed] = usePersistedFlag('data-agent.aipanel.collapsed', false)
   return (
     <div className="flex h-full min-h-0">
       {!sidebar.collapsed && (
@@ -223,8 +280,13 @@ export default function Workspace() {
                   onCollapse={() => sidebar.setCollapsed(true)} />
       )}
       <CanvasArea showSidebarToggle={sidebar.collapsed}
-                  onToggleSidebar={() => sidebar.setCollapsed(false)} />
-      <RightAiPanel />
+                  onToggleSidebar={() => sidebar.setCollapsed(false)}
+                  showAiToggle={aiCollapsed}
+                  onToggleAi={() => setAiCollapsed(false)} />
+      {!aiCollapsed && (
+        <RightAiPanel width={aiWidth} onResize={setAiWidth}
+                      onCollapse={() => setAiCollapsed(true)} />
+      )}
     </div>
   )
 }

@@ -302,7 +302,10 @@ function ChatInner({ sid, initial }: { sid: string; initial: UIMessage[] }) {
         {messages.map((m: UIMessage) => (
           <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : ''}>
             {m.role === 'user' ? (
-              <div className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl px-3 py-1.5 text-sm">
+              <div
+                className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl px-3 py-1.5"
+                style={{ fontSize: '0.7rem' }}
+              >
                 {(m.parts as Part[]).filter((p) => p.type === 'text').map((p, i) => (
                   <span key={i}>{p.text}</span>
                 ))}
@@ -312,7 +315,11 @@ function ChatInner({ sid, initial }: { sid: string; initial: UIMessage[] }) {
                 {(m.parts as Part[]).map((p, i) => {
                   if (p.type === 'text') {
                     return String(p.text).trim() ? (
-                      <div key={i} className="prose prose-sm dark:prose-invert max-w-none text-sm [&_p]:my-1">
+                      <div
+                        key={i}
+                        className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1"
+                        style={{ fontSize: '0.7rem' }}
+                      >
                         <Streamdown>{String(p.text)}</Streamdown>
                       </div>
                     ) : null
