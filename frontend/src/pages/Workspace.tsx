@@ -1,8 +1,8 @@
 /** VSCode-style Workspace: left tree (sessions/datasets) · center canvas (main
  * work area) · right AI panel placeholder (goes live in N3). */
 
-import { Database, Folder, FileText, Sparkles } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Database, Folder, FileText, PanelLeftClose, PanelLeftOpen, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ChartCard } from '@/components/canvas/ChartCard'
@@ -13,13 +13,50 @@ import { useChatStore } from '@/stores/chatStore'
 import { stopCatalogPolling } from '@/stores/catalogStore'
 import { BAR_TOPN_SOURCE } from '@/lib/seedProcessors'
 
-function LeftTree() {
+/* ---- sidebar width/collapse（持久化，带上下限）---- */
+const SB_MIN = 180
+const SB_MAX = 420
+const SB_DEFAULT = 240
+const clampW = (w: number) => Math.min(SB_MAX, Math.max(SB_MIN, Math.round(w)))
+
+function useSidebarState() {
+  const [width, setWidthState] = useState(() => {
+    const n = Number(localStorage.getItem('data-agent.sidebar.width'))
+    return Number.isFinite(n) && n > 0 ? clampW(n) : SB_DEFAULT
+  })
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem('data-agent.sidebar.collapsed') === '1')
+  useEffect(() => { localStorage.setItem('data-agent.sidebar.width', String(width)) }, [width])
+  useEffect(() => { localStorage.setItem('data-agent.sidebar.collapsed', collapsed ? '1' : '0') }, [collapsed])
+  const setWidth = (w: number) => setWidthState(clampW(w))
+  return { width, setWidth, collapsed, setCollapsed }
+}
+
+function LeftTree({ width, onResize, onCollapse }: {
+  width: number
+  onResize: (w: number) => void
+  onCollapse: () => void
+}) {
   const briefs = useCatalogStore((s) => s.briefs)
   const refresh = useCatalogStore((s) => s.refreshList)
+  const drag = useRef<{ startX: number; startW: number } | null>(null)
   useEffect(() => {
     void refresh()
     return stopCatalogPolling
   }, [refresh])
+  const onDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = { startX: e.clientX, startW: width }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    e.preventDefault()
+  }
+  const onDragMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return
+    onResize(drag.current.startW + (e.clientX - drag.current.startX))
+  }
+  const onDragEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = null
+    e.currentTarget.releasePointerCapture(e.pointerId)
+  }
   const { parents, childrenOf } = useMemo(() => {
     const parents = briefs.filter((b) => !b.parent_id)
     const childrenOf = new Map<string, typeof briefs>()
@@ -31,9 +68,13 @@ function LeftTree() {
     return { parents, childrenOf }
   }, [briefs])
   return (
-    <aside className="flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar px-2 py-3">
+    <aside style={{ width }} className="relative flex shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar px-2 py-3">
       <p className="text-muted-foreground flex items-center gap-1 px-1 pb-1 text-[11px] font-medium">
         <Database className="size-3" /> 数据源（{briefs.length}）
+        <button onClick={onCollapse} title="折叠侧边栏"
+                className="ml-auto rounded p-0.5 hover:bg-accent hover:text-foreground">
+          <PanelLeftClose className="size-3.5" />
+        </button>
       </p>
       {parents.map((b) => (
         <div key={b.id}>
@@ -55,11 +96,22 @@ function LeftTree() {
         </div>
       ))}
       {briefs.length === 0 && <p className="px-1 text-[11px] text-muted-foreground">先到「数据源」页注册路径</p>}
+      {/* 拖拽把手：右缘 1px 视觉线 + 5px 命中区；双击恢复默认宽 */}
+      <div
+        role="separator" aria-orientation="vertical"
+        onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd}
+        onDoubleClick={() => onResize(SB_DEFAULT)}
+        title="拖拽调宽 · 双击复位（180–420px）"
+        className="absolute inset-y-0 right-0 z-10 w-[5px] cursor-col-resize select-none transition-colors hover:bg-primary/40"
+      />
     </aside>
   )
 }
 
-function CanvasArea() {
+function CanvasArea({ showSidebarToggle, onToggleSidebar }: {
+  showSidebarToggle: boolean
+  onToggleSidebar: () => void
+}) {
   const assets = useCanvasStore((s) => s.assets)
   const renders = useCanvasStore((s) => s.renders)
   const loaded = useCanvasStore((s) => s.loaded)
@@ -87,6 +139,12 @@ function CanvasArea() {
   return (
     <main className="flex min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b px-4 py-2">
+        {showSidebarToggle && (
+          <button onClick={onToggleSidebar} title="展开侧边栏"
+                  className="text-muted-foreground rounded p-1 transition-colors hover:bg-accent hover:text-foreground">
+            <PanelLeftOpen className="size-4" />
+          </button>
+        )}
         <h2 className="text-sm font-medium">画布</h2>
         <span className="text-muted-foreground text-xs">{assets.length} 张卡</span>
         <div className="ml-auto flex gap-2">
@@ -157,10 +215,15 @@ function RightAiPanel() {
 }
 
 export default function Workspace() {
+  const sidebar = useSidebarState()
   return (
     <div className="flex h-full min-h-0">
-      <LeftTree />
-      <CanvasArea />
+      {!sidebar.collapsed && (
+        <LeftTree width={sidebar.width} onResize={sidebar.setWidth}
+                  onCollapse={() => sidebar.setCollapsed(true)} />
+      )}
+      <CanvasArea showSidebarToggle={sidebar.collapsed}
+                  onToggleSidebar={() => sidebar.setCollapsed(false)} />
       <RightAiPanel />
     </div>
   )

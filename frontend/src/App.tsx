@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 
 import DatasourcesPage from '@/pages/Datasources'
 import AuditPage from '@/pages/Audit'
@@ -17,8 +18,18 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'settings', label: '设置' },
 ]
 
+type Theme = 'dark' | 'light'
+
 function App() {
   const [tab, setTab] = useState<Tab>('workspace')
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('data-agent-theme')
+    return saved === 'light' ? 'light' : 'dark'
+  })
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    localStorage.setItem('data-agent-theme', theme)
+  }, [theme])
   const aiEnabled = useChatStore((s) => s.aiEnabled)
   const setAiToggle = useChatStore((s) => s.setAiToggle)
   const loadAiToggle = useChatStore((s) => s.loadAiToggle)
@@ -56,6 +67,13 @@ function App() {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title="主题：黑色 / 白色"
+            className="text-muted-foreground rounded p-1.5 transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </button>
           <button
             onClick={() => void setAiToggle(!aiEnabled).catch(() => undefined)}
             title="AI toggle：关闭后 AI 对话入口下线，画布/表单/重放照常"

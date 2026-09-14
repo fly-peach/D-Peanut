@@ -75,8 +75,10 @@ export function buildOption(
 ): Record<string, unknown> {
   const map = config.data_map.map
   const palette = appearance.color_palette?.length ? appearance.color_palette : cssPalette()
-  const axisText = { color: '#8a8f98', fontSize: appearance.font_size }
-  const label = { show: appearance.show_label, color: '#d0d6e0', fontSize: appearance.font_size }
+  const dark = document.documentElement.classList.contains('dark')
+  const th = (d: string, l: string) => (dark ? d : l)
+  const axisText = { color: th('#8a8f98', '#6b7078'), fontSize: appearance.font_size }
+  const label = { show: appearance.show_label, color: th('#d0d6e0', '#3c3f44'), fontSize: appearance.font_size }
   const base: Record<string, unknown> = {
     backgroundColor: 'transparent',
     color: palette,
@@ -90,8 +92,8 @@ export function buildOption(
     const xs = col(render, 'x', map, 'x')
     const ys = col(render, 'y', map, 'y')
     const seriesType = type === 'line' || type === 'area' ? 'line' : 'bar'
-    base.xAxis = { type: 'category', data: xs, axisLabel: axisText, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.12)' } } }
-    base.yAxis = { type: 'value', axisLabel: axisText, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } } }
+    base.xAxis = { type: 'category', data: xs, axisLabel: axisText, axisLine: { lineStyle: { color: th('rgba(255,255,255,0.12)', 'rgba(0,0,0,0.12)') } } }
+    base.yAxis = { type: 'value', axisLabel: axisText, splitLine: { lineStyle: { color: th('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.06)') } } }
     base.series = [{
       type: seriesType,
       data: ys.map(Number),
