@@ -16,7 +16,10 @@ from .models import Dataset, TableProfile
 def effective_privacy(ds: Dataset, settings) -> bool:
     if ds.privacy_mode is not None:
         return ds.privacy_mode
-    return bool(settings.get_setting("privacy_mode_default", False))
+    # 两种调用方：SettingsService（get_setting）与 agents 的 RunSettings（privacy_default 字段）
+    if hasattr(settings, "get_setting"):
+        return bool(settings.get_setting("privacy_mode_default", False))
+    return bool(getattr(settings, "privacy_default", False))
 
 
 def preview_from_df(df: pd.DataFrame, n: int) -> dict[str, Any]:
