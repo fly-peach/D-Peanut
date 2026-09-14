@@ -78,7 +78,10 @@ function FinalAnswerCard({ input }: { input: Part }) {
   const numbers: Record<string, string> = input?.numbers ?? {}
   return (
     <div className="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
-      <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_table]:text-xs">
+      <div
+        className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_table]:text-xs"
+        style={{ fontSize: '0.7rem' }}
+      >
         <Streamdown>{String(input?.summary ?? '')}</Streamdown>
       </div>
       {Array.isArray(input?.key_findings) && input.key_findings.length > 0 && (
