@@ -84,7 +84,7 @@ def build_agent() -> Agent[AgentDeps, Any]:
             runner = getattr(ctx.deps, "_chat_runner", None)
             kernel_vars: list[str] = []
             if runner is not None:
-                kernel_vars = runner.kernel_vars(ctx.deps.state.session_id)
+                kernel_vars = runner.kernel_vars(ctx.deps.run_state.session_id)
             return render_dynamic_prompt(ctx.deps, kernel_vars)
         except Exception:  # noqa: BLE001 — dynamic context must never break the run
             return ""

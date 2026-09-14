@@ -70,7 +70,7 @@ def deps(env):
     return AgentDeps(
         kernel=kernel_pool, catalog=pipeline, repo=repo, canvas_assets=asset_svc,
         canvas_replay=replay_svc, store=run_store, settings=RunSettings(),
-        state=RunState(run_id="rn_test", session_id="se_test"), ai_enabled=True,
+        run_state=RunState(run_id="rn_test", session_id="se_test"), ai_enabled=True,
     )
 
 
@@ -150,14 +150,14 @@ def test_full_coding_loop_with_approvals(env, deps):
     from data_agent.agents.output import FinalAnswer
 
     assert isinstance(result.output, FinalAnswer)
-    assert deps.state.reflects == 1, "one failed trial fed back"
+    assert deps.run_state.reflects == 1, "one failed trial fed back"
     asset_svc = env[5]
     card = next(x for x in asset_svc.list() if x.name == "loop_bar")
     asset = asset_svc.get(card.id)
     assert asset.status.value == "on_canvas"
     assert asset.params["top_n"] == 5
     # the trial run's asset events were queued for data-asset-changed frames
-    assert any(ev["asset_id"] == asset.id for ev in deps.state.asset_events) or True
+    assert any(ev["asset_id"] == asset.id for ev in deps.run_state.asset_events) or True
 
 
 # --- HTTP plane: toggle / chat smoke / llm test --------------------------------

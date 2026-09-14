@@ -93,8 +93,8 @@ def render_dynamic_prompt(deps: AgentDeps, kernel_vars: list[str]) -> str:
         lines.append("试跑内核无用户变量。")
     if not deps.ai_enabled:
         lines.append("AI toggle 当前为 OFF：你不会收到请求。")
-    if deps.state.last_error_summary:
-        lines.append("上次失败摘要(避免重复踩坑): " + deps.state.last_error_summary[:400])
+    if deps.run_state.last_error_summary:
+        lines.append("上次失败摘要(避免重复踩坑): " + deps.run_state.last_error_summary[:400])
     lines.append(f"语言: {deps.settings.language} | 时区: {deps.settings.timezone}")
     return "\n".join(lines)
 

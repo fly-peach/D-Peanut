@@ -67,5 +67,5 @@ class AgentDeps:
     canvas_replay: ReplayService
     store: RunStore
     settings: RunSettings
-    state: RunState
+    run_state: RunState
     ai_enabled: bool = True

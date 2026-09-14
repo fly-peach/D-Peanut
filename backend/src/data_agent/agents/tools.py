@@ -33,7 +33,7 @@ _WRITE_SQL = re.compile(
 def _track(ctx: RunContext[AgentDeps]) -> None:
     """Mirror live usage into run state (budget sniffing + data-run summary)."""
     usage = ctx.usage
-    st = ctx.deps.state
+    st = ctx.deps.run_state
     st.usage_tokens = int(getattr(usage, "total_tokens", 0) or 0)
     st.usage_cost = float(getattr(usage, "cost_usd", None) or 0.0)
     budget = ctx.deps.settings
@@ -164,7 +164,7 @@ def run_in_kernel(
     verdict = verify_code(code)
     if not verdict.safe:
         raise ApprovalRequired(f"run_in_kernel 危险模式: {verdict.reason}")
-    st = deps.state
+    st = deps.run_state
     if st.reflects >= 3:
         return ToolReturn(
             {"ok": False,
@@ -243,12 +243,13 @@ def write_processor(ctx: RunContext[AgentDeps], source: str,
             return {"error": f"asset {asset_id!r} not found"}
         asset = deps.canvas_assets.save_source(asset_id, source, params=merged)
     else:
+        asset_name = name or f"asset_{deps.run_state.run_id[:6]}_{len(deps.run_state.asset_events)}"
         asset = deps.canvas_assets.create(
-            ChartAsset(name=name or f"asset_{deps.state.run_id[:6]}_{len(deps.state.asset_events)}",
-                       bindings=bnds, param_spec=spec, params=merged, chart_type=chart_type),
+            ChartAsset(name=asset_name, bindings=bnds, param_spec=spec,
+                       params=merged, chart_type=chart_type),
             source)
     result = deps.canvas_replay.replay(asset.id, trigger="validate")
-    deps.state.asset_events.append({"asset_id": asset.id, "version": asset.version,
+    deps.run_state.asset_events.append({"asset_id": asset.id, "version": asset.version,
                                     "gate_passed": result.gate.passed, "trigger": "ai"})
     return {"asset_id": asset.id, "version": asset.version, "status": asset.status.value,
             "gate": {"passed": result.gate.passed, "errors": result.gate.errors,
@@ -264,7 +265,7 @@ def validate_asset(ctx: RunContext[AgentDeps], asset_id: str) -> dict[str, Any]:
         result = deps.canvas_replay.replay(asset_id, trigger="validate")
     except Exception:
         return {"error": f"asset {asset_id!r} not found"}
-    deps.state.asset_events.append({"asset_id": asset_id, "version": result.version,
+    deps.run_state.asset_events.append({"asset_id": asset_id, "version": result.version,
                                     "gate_passed": result.gate.passed, "trigger": "ai"})
     return {"passed": result.gate.passed, "errors": result.gate.errors,
             "version": result.version, "notes": result.notes[:5]}
@@ -303,7 +304,7 @@ def save_asset(ctx: RunContext[AgentDeps], asset_id: str,
         asset.placement = Placement(**{**asset.placement.model_dump(), **canvas})
     asset.status = AssetStatus.on_canvas
     deps.canvas_assets.update(asset)
-    deps.state.asset_events.append({"asset_id": asset.id, "version": asset.version,
+    deps.run_state.asset_events.append({"asset_id": asset.id, "version": asset.version,
                                     "gate_passed": True, "trigger": "ai"})
     return {"asset_id": asset.id, "version": asset.version, "status": "on_canvas",
             "name": asset.name}
@@ -317,9 +318,9 @@ def emit_adhoc_chart(ctx: RunContext[AgentDeps], title: str, render: dict[str, A
     """Emit a one-off chart card into the conversation (no asset, no persistence
     on canvas). code_ref = the run_in_kernel call that produced it (promote seed)."""
     deps = ctx.deps
-    cached = deps.state.code_cache.get(code_ref)
+    cached = deps.run_state.code_cache.get(code_ref)
     source = cached["code"] if cached else ""
     payload = {"title": title, "render": render, "config": config, "code_ref": code_ref}
-    aid = deps.store.save_adhoc(deps.state.session_id, deps.state.run_id, payload, source)
+    aid = deps.store.save_adhoc(deps.run_state.session_id, deps.run_state.run_id, payload, source)
     return ToolReturn(f"已出一次性图：{title} (adhoc: {aid})",
                       metadata={"kind": "adhoc", "adhoc_id": aid, "payload": payload})

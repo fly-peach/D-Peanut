@@ -86,12 +86,15 @@ class ChatRunner:
         deps = AgentDeps(
             kernel=self.kernels, catalog=self.pipeline, repo=self.repo,
             canvas_assets=self.canvas_assets, canvas_replay=self.canvas_replay,
-            store=self.store, settings=rs, state=state,
+            store=self.store, settings=rs, run_state=state,
             ai_enabled=bool(self.settings.get_setting("ai_enabled", True)),
         )
         deps._chat_runner = self  # dynamic-instructions hook for kernel var sniffing
-        # NB: adapter.run_stream converts the dataclass deps into a dispatch dict
-        # internally; callers must keep their own reference to the RunState object.
+        # NB: the UI adapter duck-types any deps with a `.state` attribute as its
+        # StateHandler protocol and OVERWRITES deps.state with the request's state
+        # dict on every run (pydantic_ai/ui/_adapter.py). Our per-run state therefore
+        # lives in `run_state` (n5: renamed from `state` to dodge the collision);
+        # callers must keep their own reference to the RunState object.
         return deps, state
 
     def kernel_vars(self, session_id: str) -> list[str]:
@@ -219,7 +222,7 @@ class ChatRunner:
             yield line
 
     async def _error_stream(self, adapter, deps, msg: str):
-        bad_run = deps.state.run_id
+        bad_run = deps.run_state.run_id
 
         async def one() -> AsyncIterator[Any]:
             yield DataChunk(type="data-run", data={"run_id": bad_run, "status": "failed",
