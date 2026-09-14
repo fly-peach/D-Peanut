@@ -30,6 +30,10 @@ class RunSettings:
     privacy_default: bool = False
     language: str = "zh"
     timezone: str = "Asia/Shanghai"
+    # False → OpenAIModelProfile['openai_supports_tool_choice_required']=False：
+    # 思考模式模型（deepseek-flash 等）拒绝 tool_choice='required'，置 False 时
+    # pydantic-ai 静默降级为 'auto'（工具全保留，模型自主选择）。
+    supports_forced_tool_choice: bool = True
 
 
 @dataclass

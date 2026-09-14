@@ -35,7 +35,10 @@ def build_model(settings: RunSettings, api_key: str | None) -> Any:
     if not base_url:
         raise ValueError(f"unknown provider {provider!r} and no base_url given")
     provider = OpenAIProvider(base_url=base_url, api_key=api_key or "unset")
-    return OpenAIChatModel(model_name, provider=provider)
+    profile = None if settings.supports_forced_tool_choice else {
+        "openai_supports_tool_choice_required": False,
+    }
+    return OpenAIChatModel(model_name, provider=provider, profile=profile)
 
 
 def model_settings(settings: RunSettings) -> ModelSettings:
